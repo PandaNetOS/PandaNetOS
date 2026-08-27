@@ -1,8 +1,8 @@
 # PandaNetOS
 
-> pandanetpl 生态的统一架构与标准仓库
+> pandanetos 生态的统一架构与标准仓库
 
-PandaNetOS 是 pandanetpl 项目群的**架构标准、通信协议、共享代码**的统一管理仓库。所有子项目（pk、spde、pcdn-keeper 等）都必须遵循本仓库定义的标准。
+PandaNetOS 是 pandanetos 项目群的**架构标准、通信协议、共享代码**的统一管理仓库。所有子项目（pk、spde、pcdn-keeper 等）都必须遵循本仓库定义的标准。
 
 ## 生态项目
 
