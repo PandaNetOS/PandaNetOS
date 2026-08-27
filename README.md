@@ -48,6 +48,7 @@ PandaNetOS 是 pandanetos 项目群的**架构标准、通信协议、共享代�
 ### 通信标准
 - [API 规范](docs/standards/api.md) - RESTful API、统一响应、分页、错误码
 - [能力协商与版本兼容](docs/standards/capability-negotiation.md) - 组件能力注册、能力协商、版本解耦、向前/向后兼容
+- [自描述能力清单](docs/standards/capability-manifest.md) - 每个构建版本生成说明书，运行时上报，其他程序一看就知道怎么调用
 - [WebSocket 协议](docs/standards/websocket.md) - 消息格式、心跳、重连
 - [节点通信协议](docs/standards/node-protocol.md) - 注册、心跳、任务领取、进度上报
 
