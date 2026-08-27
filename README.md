@@ -8,9 +8,9 @@ PandaNetOS 是 pandanetpl 项目群的**架构标准、通信协议、共享代�
 
 | 项目 | 角色 | 仓库 |
 |------|------|------|
-| **pk** | 主控台（Control Plane）- 任务下发、节点管理、实时监控 | [PandaNetOS/pk](https://github.com/PandaNetOS/pk) |
-| **spde** | 下载节点（Data Plane）- 多协议下载、带宽榨取、进度上报 | [PandaNetOS/spde](https://github.com/PandaNetOS/spde) |
-| **pcdn-keeper** | Docker 镜像 - 封装 pk + spde 的一体化部署 | [PandaNetOS/pcdn-keeper](https://github.com/PandaNetOS/pcdn-keeper) |
+| **pk** | 主控台（Control Plane）- 任务下发、节点管理、实时监控 | [pandamelive/pk](https://github.com/pandamelive/pk) |
+| **spde** | 下载节点（Data Plane）- 多协议下载、带宽榨取、进度上报 | [pandamelive/spde](https://github.com/pandamelive/spde) |
+| **pcdn-keeper** | Docker 镜像 - 封装 pk + spde 的一体化部署 | [pandamelive/pcdn-keeper](https://github.com/pandamelive/pcdn-keeper) |
 | **PandaNetOS** | 架构标准 + 共享库 | 当前仓库 |
 
 ## 系统架构
