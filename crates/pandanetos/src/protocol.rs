@@ -32,6 +32,10 @@ pub mod paths {
     /// 节点配置文件（YAML）
     pub const NODE_CONFIG_YAML: &str = "/api/v1/nodes/{id}/config.yaml";
 
+    // ===== 总览 =====
+    /// 系统总览
+    pub const OVERVIEW: &str = "/api/v1/overview";
+
     // ===== 任务 =====
     /// 任务列表
     pub const TASKS: &str = "/api/v1/tasks";
