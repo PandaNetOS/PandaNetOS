@@ -17,6 +17,8 @@ pub mod paths {
     // ===== 节点 =====
     /// 节点注册
     pub const AGENT_REGISTER: &str = "/api/v1/agent/register";
+    /// 节点 WebSocket 实时通道
+    pub const AGENT_WS: &str = "/api/v1/agent/ws";
     /// 节点心跳
     pub const NODE_HEARTBEAT: &str = "/api/v1/nodes/{id}/heartbeat";
     /// 节点列表
@@ -27,6 +29,8 @@ pub mod paths {
     pub const NODE_CAPABILITIES: &str = "/api/v1/nodes/{id}/capabilities";
     /// 清理离线节点
     pub const NODES_OFFLINE: &str = "/api/v1/nodes/offline";
+    /// 节点配置文件（YAML）
+    pub const NODE_CONFIG_YAML: &str = "/api/v1/nodes/{id}/config.yaml";
 
     // ===== 任务 =====
     /// 任务列表
@@ -82,6 +86,9 @@ pub struct RegisterResp {
     pub poll_interval_secs: u64,
     /// 主控监听地址
     pub master_listen: String,
+    /// 节点注册后的状态（online/pending，可选字段，兼容旧主控不返回状态）
+    #[serde(default)]
+    pub status: Option<String>,
 }
 
 /// 节点心跳请求
