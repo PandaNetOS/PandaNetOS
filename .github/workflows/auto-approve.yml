@@ -19,6 +19,7 @@ jobs:
         with:
           app-id: 4769518
           private-key: ${{ secrets.AUTO_APPROVE_PRIVATE_KEY }}
+          owner: PandaNetOS
 
       - name: Wait for CI then approve
         env:
