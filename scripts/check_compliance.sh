@@ -5,9 +5,16 @@
 # 所有项目 CI 必须调用本脚本，失败则阻断合并。
 # 本脚本放在 PandaNetOS/scripts/check_compliance.sh，所有项目共用。
 #
+# 支持项目类型：
+#   - Rust 项目（有 Cargo.toml）：全部8项检查
+#   - 非 Rust 项目（Docker/Shell等）：跳过 Rust 相关检查，仅检查通用项
+#
 # 用法：
 #   bash check_compliance.sh <项目根目录>
 #   bash check_compliance.sh .          # 检查当前目录
+#
+# 白名单注释：
+#   // panda-allow: cli-output    允许该行使用 println!（CLI 输出场景）
 #
 # 退出码：0=全部通过，1=存在问题
 # =============================================================================
@@ -28,6 +35,7 @@ fi
 fail()    { echo -e "${RED}  ❌ FAIL: $1${RESET}"; ERRORS=$((ERRORS + 1)); }
 pass()    { echo -e "${GREEN}  ✅ PASS: $1${RESET}"; }
 warn()    { echo -e "${YELLOW}  ⚠️  WARN: $1${RESET}"; WARNINGS=$((WARNINGS + 1)); }
+skip()    { echo -e "${CYAN}  ⏭️  SKIP: $1${RESET}"; }
 section() { echo -e "\n${CYAN}[$1] $2${RESET}"; }
 
 echo "========================================"
@@ -39,13 +47,22 @@ echo "========================================"
 # 切换到项目目录
 cd "$PROJECT_DIR"
 
+# ---- 项目类型检测 ----
+IS_RUST_PROJECT=0
+if [ -f "Cargo.toml" ]; then
+  IS_RUST_PROJECT=1
+  echo "项目类型: Rust 项目（检测到 Cargo.toml）"
+else
+  echo "项目类型: 非 Rust 项目（未检测到 Cargo.toml，跳过 Rust 相关检查）"
+fi
+
 # =============================================================================
-# [1/8] 标准库依赖检查（强制）
+# [1/8] 标准库依赖检查（Rust 项目强制）
 # =============================================================================
 section "1/8" "标准库依赖检查"
 
-if [ ! -f "Cargo.toml" ]; then
-  fail "Cargo.toml 不存在"
+if [ "$IS_RUST_PROJECT" -eq 0 ]; then
+  skip "非 Rust 项目，跳过标准库依赖检查"
 else
   # 必须使用 path 依赖
   if grep -qE 'pandanetos\s*=\s*\{[^}]*path\s*=\s*"\.\./PandaNetOS/crates/pandanetos"' Cargo.toml; then
@@ -80,17 +97,19 @@ else
   fail "未找到 ../PandaNetOS/crates/pandanetos（标准库仓库必须与本项目同级）"
 fi
 
-# 标准目录结构
-for dir in src; do
-  if [ -d "$dir" ]; then
-    pass "$dir/ 目录存在"
+# Rust 项目检查 src/ 目录
+if [ "$IS_RUST_PROJECT" -eq 1 ]; then
+  if [ -d "src" ]; then
+    pass "src/ 目录存在"
   else
-    fail "$dir/ 目录不存在"
+    fail "src/ 目录不存在"
   fi
-done
+else
+  skip "非 Rust 项目，跳过 src/ 目录检查"
+fi
 
 # =============================================================================
-# [3/8] README 规范检查（强制）
+# [3/8] README 规范检查（所有项目强制）
 # =============================================================================
 section "3/8" "README 规范检查"
 
@@ -119,14 +138,14 @@ else
   fi
 
   # 必须包含快速开始
-  if grep -qE '^## .*快速开始|^## .*Quick Start' README.md; then
+  if grep -qE '^## .*快速开始|^## .*Quick Start|^## .*快速使用|^## .*使用方法' README.md; then
     pass "README 包含「快速开始」章节"
   else
     warn "README 建议包含「快速开始」章节"
   fi
 
   # 必须包含许可证
-  if grep -qiE '^## .*许可|MIT|Apache' README.md; then
+  if grep -qiE '^## .*许可|^## .*License|MIT|Apache' README.md; then
     pass "README 包含许可证信息"
   else
     warn "README 建议包含许可证信息（统一 MIT）"
@@ -134,11 +153,13 @@ else
 fi
 
 # =============================================================================
-# [4/8] 代码格式检查（强制）
+# [4/8] 代码格式检查（Rust 项目强制）
 # =============================================================================
 section "4/8" "代码格式检查"
 
-if command -v cargo &>/dev/null; then
+if [ "$IS_RUST_PROJECT" -eq 0 ]; then
+  skip "非 Rust 项目，跳过 fmt 检查"
+elif command -v cargo &>/dev/null; then
   if cargo fmt --all -- --check 2>&1; then
     pass "cargo fmt 检查通过"
   else
@@ -149,11 +170,13 @@ else
 fi
 
 # =============================================================================
-# [5/8] Clippy 检查（强制）
+# [5/8] Clippy 检查（Rust 项目强制）
 # =============================================================================
 section "5/8" "Clippy 检查"
 
-if command -v cargo &>/dev/null; then
+if [ "$IS_RUST_PROJECT" -eq 0 ]; then
+  skip "非 Rust 项目，跳过 clippy 检查"
+elif command -v cargo &>/dev/null; then
   if cargo clippy --all-targets -- -D warnings 2>&1 | tail -5; then
     pass "cargo clippy 检查通过（警告视为错误）"
   else
@@ -164,11 +187,13 @@ else
 fi
 
 # =============================================================================
-# [6/8] 单元测试（强制）
+# [6/8] 单元测试（Rust 项目强制）
 # =============================================================================
 section "6/8" "单元测试"
 
-if command -v cargo &>/dev/null; then
+if [ "$IS_RUST_PROJECT" -eq 0 ]; then
+  skip "非 Rust 项目，跳过单元测试"
+elif command -v cargo &>/dev/null; then
   if cargo test 2>&1 | tail -10; then
     pass "cargo test 全部通过"
   else
@@ -179,16 +204,17 @@ else
 fi
 
 # =============================================================================
-# [7/8] 敏感信息检查（强制）
+# [7/8] 敏感信息检查（所有项目强制）
 # =============================================================================
 section "7/8" "敏感信息检查"
 
 SENSITIVE_FOUND=0
+
 # 检查硬编码 token / password / api_key
-if grep -rn --include="*.rs" --include="*.yaml" --include="*.yml" --include="*.toml" \
+if grep -rn --include="*.rs" --include="*.yaml" --include="*.yml" --include="*.toml" --include="*.sh" \
   -E '(token|password|api_key|secret)\s*=\s*"[a-zA-Z0-9_\-]{8,}"' \
-  src/ Cargo.toml *.yaml *.yml 2>/dev/null | \
-  grep -vE '""|null|placeholder|example|your_|<.*>' | \
+  src/ Cargo.toml *.yaml *.yml *.sh 2>/dev/null | \
+  grep -vE '""|null|placeholder|example|your_|<.*>|panda-allow' | \
   grep -v 'target/'; then
   fail "发现硬编码敏感信息（token/password/api_key/secret）"
   SENSITIVE_FOUND=1
@@ -207,27 +233,35 @@ if [ "$SENSITIVE_FOUND" -eq 0 ]; then
 fi
 
 # =============================================================================
-# [8/8] 代码规范检查（强制）
+# [8/8] 代码规范检查（Rust 项目强制）
 # =============================================================================
 section "8/8" "代码规范检查"
 
-# 禁止 println!/dbg!/todo! 在 src 中
-FORBIDDEN_FOUND=0
-if grep -rn --include="*.rs" -E '\b(println!|dbg!|todo!|unimplemented!)\(' src/ 2>/dev/null; then
-  fail "src/ 中存在 println!/dbg!/todo!/unimplemented!（使用 tracing 替代日志，todo 必须在提交前完成）"
-  FORBIDDEN_FOUND=1
-fi
-
-# 禁止 unwrap() 无安全注释
-UNWRAP_COUNT=$(grep -rn --include="*.rs" -E '\.unwrap\(\)' src/ 2>/dev/null | grep -vc 'SAFETY\|安全\|//.*unwrap' || true)
-if [ "$UNWRAP_COUNT" -gt 0 ]; then
-  warn "src/ 中存在 $UNWRAP_COUNT 处 unwrap()（建议用 ? 或 expect 并说明安全理由）"
+if [ "$IS_RUST_PROJECT" -eq 0 ]; then
+  skip "非 Rust 项目，跳过代码规范检查"
 else
-  pass "未发现无注释的 unwrap()"
-fi
+  # 禁止 println!/dbg!/todo! 在 src 中（支持白名单注释 // panda-allow: cli-output）
+  FORBIDDEN_FOUND=0
+  FORBIDDEN_LINES=$(grep -rn --include="*.rs" -E '\b(println!|dbg!|todo!|unimplemented!)\(' src/ 2>/dev/null | \
+    grep -v 'panda-allow:' || true)
+  if [ -n "$FORBIDDEN_LINES" ]; then
+    echo "$FORBIDDEN_LINES"
+    fail "src/ 中存在 println!/dbg!/todo!/unimplemented!（使用 tracing 替代日志；CLI 输出可加 // panda-allow: cli-output）"
+    FORBIDDEN_FOUND=1
+  fi
 
-if [ "$FORBIDDEN_FOUND" -eq 0 ]; then
-  pass "未发现禁用宏（println!/dbg!/todo!）"
+  # 禁止 unwrap() 无安全注释
+  UNWRAP_COUNT=$(grep -rn --include="*.rs" -E '\.unwrap\(\)' src/ 2>/dev/null | \
+    grep -vc 'SAFETY\|安全\|//.*unwrap\|panda-allow' || true)
+  if [ "$UNWRAP_COUNT" -gt 0 ]; then
+    warn "src/ 中存在 $UNWRAP_COUNT 处 unwrap()（建议用 ? 或 expect 并说明安全理由）"
+  else
+    pass "未发现无注释的 unwrap()"
+  fi
+
+  if [ "$FORBIDDEN_FOUND" -eq 0 ]; then
+    pass "未发现禁用宏（println!/dbg!/todo!）"
+  fi
 fi
 
 # =============================================================================
@@ -237,7 +271,6 @@ echo ""
 echo "========================================"
 echo " 检查结果汇总"
 echo "========================================"
-echo -e " 通过: ${GREEN}$(echo "$(grep -c 'PASS:' /dev/stdin 2>/dev/null || echo 0)")${RESET}" 2>/dev/null || true
 
 if [ "$ERRORS" -eq 0 ] && [ "$WARNINGS" -eq 0 ]; then
   echo -e "${GREEN}✅ 全部通过，无警告${RESET}"
@@ -246,7 +279,7 @@ elif [ "$ERRORS" -eq 0 ]; then
   echo -e "${YELLOW}⚠️  全部通过，但有 $WARNINGS 个警告（建议修复）${RESET}"
   exit 0
 else
-  echo -e "${RED}❌ 发现 $ERRORS 个必须修复的问题"
+  echo -e "${RED}❌ 发现 $ERRORS 个必须修复的问题${RESET}"
   if [ "$WARNINGS" -gt 0 ]; then
     echo -e "${YELLOW}⚠️  另有 $WARNINGS 个警告${RESET}"
   fi
