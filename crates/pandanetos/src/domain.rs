@@ -453,10 +453,7 @@ pub trait ChunkDownloader: Send + Sync {
     fn protocol(&self) -> &str;
 
     /// 探测源的可用性和文件信息（HEAD 请求等）
-    async fn probe(
-        &self,
-        source: &dyn DownloadSource,
-    ) -> crate::error::Result<DownloadFileInfo>;
+    async fn probe(&self, source: &dyn DownloadSource) -> crate::error::Result<DownloadFileInfo>;
 
     /// 下载一个分片（流式写入 writer）
     async fn download_chunk(
@@ -491,11 +488,7 @@ pub trait DownloadStrategy: Send + Sync {
     fn name(&self) -> &str;
 
     /// 判断是否支持给定的源列表和能力
-    fn supports(
-        &self,
-        sources: &[Box<dyn DownloadSource>],
-        caps: &SourceCapabilities,
-    ) -> bool;
+    fn supports(&self, sources: &[Box<dyn DownloadSource>], caps: &SourceCapabilities) -> bool;
 
     /// 执行下载策略
     async fn execute(
