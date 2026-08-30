@@ -66,22 +66,58 @@ PandaNetOS 是 pandanetos 项目群的**架构标准、通信协议、共享代�
 
 ### `pandanetos` crate
 
-Rust 共享标准库，所有项目共同依赖：
+Rust 共享标准库，所有项目共同依赖。
+
+#### 依赖方式
+
+**本地开发（强制 path 依赖，目录布局固定）：**
+
+各项目仓库与 `PandaNetOS` 仓库必须放在**同一父目录**下：
+
+```
+<workspace>/
+├── PandaNetOS/              # 本仓库（标准库）
+│   └── crates/pandanetos/
+├── pk/                      # 主控台
+├── spde/                    # 下载节点
+└── pcdn-keeper/             # Docker 封装
+```
+
+各项目 `Cargo.toml` 中统一写：
 
 ```toml
 [dependencies]
-pandanetos = { git = "https://github.com/PandaNetOS/PandaNetOS" }
+pandanetos = { path = "../PandaNetOS/crates/pandanetos" }
 ```
 
-包含模块：
-- `error` - 统一错误类型、错误码
-- `response` - 统一响应格式、分页
-- `protocol` - 通信协议定义（API 路径、DTO、WS 消息）
-- `domain` - 领域模型、扩展点 trait
-- `config` - 配置加载工具
-- `logging` - 日志初始化
-- `time` - 时间工具
-- `utils` - 通用工具函数
+> **禁止**在项目内维护私有协议常量、私有错误码或私有响应格式；全部复用 `pandanetos`。
+
+**CI / 发布构建（git 依赖）：**
+
+GitHub Actions 中自动 checkout 本仓库并修正 path 依赖，或直接使用 git 依赖：
+
+```toml
+[dependencies]
+pandanetos = { git = "https://github.com/PandaNetOS/PandaNetOS", branch = "main" }
+```
+
+#### 包含模块
+
+- `error` - 统一错误类型、错误码（7 大领域，含 HTTP 状态码映射）
+- `response` - 统一响应格式、分页（`ApiResponse`/`ApiError`/`PageResult`）
+- `protocol` - 通信协议定义（API 路径常量、DTO、WebSocket 消息）
+- `domain` - 领域模型（Task/Node/Dispatch）、扩展点 trait（Downloader/Repository/DispatchStrategy）
+- `capability` - 自描述能力清单（Capability Manifest）
+- `config` - 配置加载工具（YAML + 环境变量覆盖）
+- `logging` - 结构化日志初始化（tracing + env-filter）
+- `time` - 时间工具（RFC3339 UTC 统一格式）
+- `utils` - 通用工具函数（字节格式化、UUID 校验）
+
+#### 一行导入
+
+```rust
+use pandanetos::prelude::*;
+```
 
 ## 版本管理
 

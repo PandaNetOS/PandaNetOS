@@ -10,6 +10,12 @@
 //! - [`logging`]：结构化日志初始化
 //! - [`time`]：时间工具
 //! - [`utils`]：通用工具函数
+//!
+//! # 快速上手
+//!
+//! ```rust
+//! use pandanetos::prelude::*;
+//! ```
 
 pub mod capability;
 pub mod config;
@@ -21,8 +27,30 @@ pub mod response;
 pub mod time;
 pub mod utils;
 
+// ---- 顶层 re-export（最常用类型，直接 `pandanetos::X` 可用）----
 pub use capability::{CapabilityManifest, ComponentRole};
+pub use domain::{Dispatch, Node, NodeStatus, Task, TaskStatus};
 pub use error::{CoreError, ErrorCode, Result};
 pub use protocol::{ClientMsg, ServerMsg};
 pub use response::{ApiError, ApiResponse, PageQuery, PageResult};
 pub use time::now_rfc3339;
+
+/// 一站式导入：`use pandanetos::prelude::*;`
+pub mod prelude {
+    pub use crate::capability::{
+        BasicInfo, BuildInfo, Capabilities, CapabilityManifest, Communication, ComponentRole,
+        ConfigurableParam, StatusReport,
+    };
+    pub use crate::domain::{
+        Dispatch, Downloader, DownloadFileInfo, DownloadProgress, Node, NodeStatus, Task,
+        TaskStatus,
+    };
+    pub use crate::error::{codes, CoreError, ErrorCode, Result};
+    pub use crate::protocol::{
+        paths, ClientMsg, DispatchConfig, HeartbeatReq, RegisterReq, RegisterResp, ServerMsg,
+        UpdateNodeCapabilitiesReq, API_PREFIX,
+    };
+    pub use crate::response::{ApiError, ApiResponse, PageQuery, PageResult};
+    pub use crate::time::{format_rfc3339, now_millis, now_rfc3339, parse_rfc3339};
+    pub use crate::utils::{format_bytes, format_speed, is_valid_uuid, new_uuid, parse_bytes};
+}
