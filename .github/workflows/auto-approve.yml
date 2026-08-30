@@ -13,25 +13,27 @@ jobs:
     runs-on: ubuntu-latest
     if: github.actor == 'pandamelive'
     steps:
+      - name: Generate App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: 4769518
+          private-key: ${{ secrets.AUTO_APPROVE_PRIVATE_KEY }}
+
       - name: Wait for CI then approve
         env:
-          PAT: ${{ secrets.AUTO_APPROVE_TOKEN }}
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
           REPO: ${{ github.repository }}
         run: |
-          if [ -z "$PAT" ]; then
-            echo "::error::AUTO_APPROVE_TOKEN secret not set"
-            exit 1
-          fi
-
           REQUIRED=("Cargo Clippy" "Cargo Format" "Cargo Test")
 
           for attempt in $(seq 1 60); do
             ALL_DONE=true
             ALL_PASS=true
 
-            CHECKS=$(curl -s -H "Authorization: token $PAT" \
+            CHECKS=$(curl -s -H "Authorization: token $APP_TOKEN" \
               "https://api.github.com/repos/$REPO/commits/$COMMIT_SHA/check-runs?per_page=100")
 
             for NAME in "${REQUIRED[@]}"; do
@@ -50,7 +52,7 @@ jobs:
               if [ "$ALL_PASS" = true ]; then
                 echo "All CI checks passed, approving PR #$PR_NUMBER"
                 HTTP=$(curl -s -o /tmp/resp.json -w "%{http_code}" -X POST \
-                  -H "Authorization: token $PAT" \
+                  -H "Authorization: token $APP_TOKEN" \
                   -H "Accept: application/vnd.github.v3+json" \
                   "https://api.github.com/repos/$REPO/pulls/$PR_NUMBER/reviews" \
                   -d '{"event":"APPROVE","body":"Auto-approved: all CI checks passed"}')
