@@ -12,7 +12,15 @@ jobs:
     runs-on: ubuntu-latest
     if: github.actor == 'pandamelive'
     steps:
-      - name: Auto approve
-        uses: hmarr/auto-approve-action@v4
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Auto approve PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          curl -s -X POST \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$REPO/pulls/$PR_NUMBER/reviews" \
+            -d '{"event":"APPROVE","body":"Auto-approved by CI (owner PR)"}'
+          echo "PR #$PR_NUMBER approved"
