@@ -14,13 +14,24 @@ jobs:
     steps:
       - name: Auto approve PR
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PAT: ${{ secrets.AUTO_APPROVE_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
         run: |
-          curl -s -X POST \
-            -H "Authorization: token $GH_TOKEN" \
+          if [ -z "$PAT" ]; then
+            echo "::error::AUTO_APPROVE_TOKEN secret is not set"
+            exit 1
+          fi
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            -H "Authorization: token $PAT" \
             -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/repos/$REPO/pulls/$PR_NUMBER/reviews" \
-            -d '{"event":"APPROVE","body":"Auto-approved by CI (owner PR)"}'
-          echo "PR #$PR_NUMBER approved"
+            -d '{"event":"APPROVE","body":"Auto-approved by CI (owner PR)"}')
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
+            echo "PR #$PR_NUMBER approved successfully"
+          else
+            echo "::error::Failed to approve PR (HTTP $HTTP_CODE): $BODY"
+            exit 1
+          fi
