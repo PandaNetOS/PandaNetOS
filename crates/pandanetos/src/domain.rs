@@ -308,11 +308,7 @@ impl ChunkSet {
     /// 根据文件大小和分片大小创建分片集合
     pub fn new(total_size: u64, chunk_size: u64) -> Self {
         let chunk_size = chunk_size.max(1);
-        let num_chunks = if total_size == 0 {
-            0
-        } else {
-            (total_size + chunk_size - 1) / chunk_size
-        };
+        let num_chunks = total_size.div_ceil(chunk_size);
         let chunks = (0..num_chunks)
             .map(|i| {
                 let offset = i * chunk_size;
