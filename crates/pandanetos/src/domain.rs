@@ -417,6 +417,8 @@ pub struct DownloadResult {
     pub failed_chunks: u32,
     /// 平均速度（字节/秒）
     pub avg_speed_bps: u64,
+    /// 耗时（秒）
+    pub elapsed_secs: f64,
     /// 错误信息（成功时为 None）
     pub error_msg: Option<String>,
 }
