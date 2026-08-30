@@ -42,8 +42,10 @@ pub mod prelude {
         ConfigurableParam, StatusReport,
     };
     pub use crate::domain::{
-        Dispatch, DownloadFileInfo, DownloadProgress, Downloader, Node, NodeStatus, Task,
-        TaskStatus,
+        CancellationToken, Chunk, ChunkDownloader, ChunkSet, ChunkState, ChunkStats, ChunkWriter,
+        Dispatch, DownloadFileInfo, DownloadProgress, DownloadResult, DownloadSource,
+        DownloadStrategy, MirrorDiscoverer, Node, NodeStatus, SourceCapabilities, SourceHealth,
+        Task, TaskStatus,
     };
     pub use crate::error::{codes, CoreError, ErrorCode, Result};
     pub use crate::protocol::{
