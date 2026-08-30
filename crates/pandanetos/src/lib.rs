@@ -42,7 +42,7 @@ pub mod prelude {
         ConfigurableParam, StatusReport,
     };
     pub use crate::domain::{
-        Dispatch, Downloader, DownloadFileInfo, DownloadProgress, Node, NodeStatus, Task,
+        Dispatch, DownloadFileInfo, DownloadProgress, Downloader, Node, NodeStatus, Task,
         TaskStatus,
     };
     pub use crate::error::{codes, CoreError, ErrorCode, Result};
