@@ -329,6 +329,15 @@ impl ChunkSet {
             chunk_size,
         }
     }
+
+    /// 计算已完成分片的总下载字节数
+    pub fn downloaded_bytes(&self) -> u64 {
+        self.chunks
+            .iter()
+            .filter(|c| c.state == ChunkState::Completed)
+            .map(|c| c.length)
+            .sum()
+    }
 }
 
 /// 单分片下载统计
@@ -398,14 +407,18 @@ pub struct SourceHealth {
 pub struct DownloadResult {
     /// 是否成功
     pub success: bool,
-    /// 已下载字节数
-    pub downloaded_bytes: u64,
     /// 总字节数
     pub total_bytes: u64,
-    /// 耗时（秒）
-    pub elapsed_secs: f64,
+    /// 已下载字节数
+    pub downloaded_bytes: u64,
+    /// 成功分片数
+    pub success_chunks: u32,
+    /// 失败分片数
+    pub failed_chunks: u32,
+    /// 平均速度（字节/秒）
+    pub avg_speed_bps: u64,
     /// 错误信息（成功时为 None）
-    pub error: Option<String>,
+    pub error_msg: Option<String>,
 }
 
 /// 下载源抽象（协议无关，http/ftp/torrent 等实现此 trait）
@@ -484,7 +497,7 @@ pub trait DownloadStrategy: Send + Sync {
     fn name(&self) -> &str;
 
     /// 判断是否支持给定的源列表和能力
-    fn supports(&self, sources: &[Box<dyn DownloadSource>], caps: &SourceCapabilities) -> bool;
+    fn supports(&self, sources: &[&dyn DownloadSource], caps: &SourceCapabilities) -> bool;
 
     /// 执行下载策略
     async fn execute(
