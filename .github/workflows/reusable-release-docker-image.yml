@@ -1,10 +1,10 @@
-name: Reusable Release - Docker Image
+name: Reusable Release - Docker Image (增强版)
 
 on:
   workflow_call:
     inputs:
       image_name:
-        description: "镜像名称（如 pcdn-keeper）"
+        description: "镜像名称"
         required: true
         type: string
       dockerfile_path:
@@ -22,6 +22,11 @@ on:
         required: false
         type: string
         default: "linux/amd64,linux/arm64"
+      push_to_ghcr:
+        description: "是否推送到 GHCR"
+        required: false
+        type: boolean
+        default: true
       push_to_dockerhub:
         description: "是否推送到 Docker Hub"
         required: false
@@ -32,24 +37,70 @@ on:
         required: false
         type: string
         default: ""
-      push_to_ghcr:
-        description: "是否推送到 GHCR"
+      push_to_aliyun:
+        description: "是否推送到阿里云 ACR"
         required: false
         type: boolean
-        default: true
+        default: false
+      aliyun_registry:
+        description: "阿里云 ACR  registry 地址"
+        required: false
+        type: string
+        default: ""
+      aliyun_namespace:
+        description: "阿里云 ACR 命名空间"
+        required: false
+        type: string
+        default: ""
       tag_latest:
         description: "是否同时打 latest 标签"
         required: false
         type: boolean
         default: true
+      tag_sha:
+        description: "是否打 git sha 标签"
+        required: false
+        type: boolean
+        default: false
+      custom_tags:
+        description: "自定义标签（换行分隔，支持变量替换）"
+        required: false
+        type: string
+        default: ""
       build_args:
         description: "构建参数（JSON 格式）"
         required: false
         type: string
         default: "{}"
+      fetch_upstream_versions:
+        description: "是否获取上游项目版本（用于组合版本标签）"
+        required: false
+        type: boolean
+        default: false
+      upstream_repos:
+        description: "上游仓库列表（JSON 数组格式，如 [\"pandamelive/pk\",\"pandamelive/spde\"]）"
+        required: false
+        type: string
+        default: "[]"
+      combo_tag_format:
+        description: "组合版本标签格式（支持 {repo} 和 {version} 变量）"
+        required: false
+        type: string
+        default: ""
+      provenance:
+        description: "是否生成 provenance"
+        required: false
+        type: boolean
+        default: false
     secrets:
       DOCKERHUB_TOKEN:
         description: "Docker Hub 访问令牌"
+        required: false
+      ALIYUN_ACR_USERNAME:
+        description: "阿里云 ACR 用户名"
+        required: false
+      ALIYUN_ACR_PASSWORD:
+        description: "阿里云 ACR 密码"
         required: false
 
 permissions:
@@ -63,18 +114,66 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: 获取上游项目版本
+        id: upstream
+        if: ${{ inputs.fetch_upstream_versions }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 解析上游仓库列表
+          REPOS_JSON='${{ inputs.upstream_repos }}'
+          COMBO_TAG=""
+          BUILD_ARGS_JSON='{}'
+          
+          # 用 python 解析 JSON 并获取版本
+          VERSIONS=$(python3 -c "
+          import json, sys, subprocess
+          repos = json.loads('$REPOS_JSON')
+          versions = {}
+          for repo in repos:
+              try:
+                  result = subprocess.run(
+                      ['gh', 'release', 'view', '--repo', repo, '--json', 'tagName', '--jq', '.tagName | ltrimstr(\"v\")'],
+                      capture_output=True, text=True, check=True
+                  )
+                  ver = result.stdout.strip()
+                  repo_name = repo.split('/')[-1]
+                  versions[repo_name] = ver
+                  print(f'{repo_name}={ver}')
+              except Exception as e:
+                  print(f'ERROR: Failed to get version for {repo}: {e}', file=sys.stderr)
+                  sys.exit(1)
+          ")
+          
+          # 设置输出变量
+          echo "$VERSIONS" >> $GITHUB_OUTPUT
+          
+          # 生成组合标签
+          if [ -n "${{ inputs.combo_tag_format }}" ]; then
+            COMBO_TAG="${{ inputs.combo_tag_format }}"
+            while IFS='=' read -r key value; do
+              COMBO_TAG=$(echo "$COMBO_TAG" | sed "s/{$key}/$value/g")
+            done <<< "$VERSIONS"
+            echo "combo_tag=$COMBO_TAG" >> $GITHUB_OUTPUT
+            echo "Combo tag: $COMBO_TAG"
+          fi
+          
+          # 生成构建参数
+          while IFS='=' read -r key value; do
+            BUILD_ARGS_JSON=$(echo "$BUILD_ARGS_JSON" | python3 -c "
+            import json, sys
+            data = json.load(sys.stdin)
+            data['${key^^}_VERSION'] = '$value'
+            print(json.dumps(data))
+            ")
+          done <<< "$VERSIONS"
+          echo "build_args=$BUILD_ARGS_JSON" >> $GITHUB_OUTPUT
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        if: ${{ inputs.push_to_dockerhub }}
-        uses: docker/login-action@v3
-        with:
-          username: ${{ inputs.dockerhub_username }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Login to GHCR
         if: ${{ inputs.push_to_ghcr }}
@@ -84,28 +183,68 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Login to Docker Hub
+        if: ${{ inputs.push_to_dockerhub }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ inputs.dockerhub_username }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to Aliyun ACR
+        if: ${{ inputs.push_to_aliyun }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ inputs.aliyun_registry }}
+          username: ${{ secrets.ALIYUN_ACR_USERNAME }}
+          password: ${{ secrets.ALIYUN_ACR_PASSWORD }}
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: |
-            ${{ inputs.push_to_dockerhub && format('{0}/{1}', inputs.dockerhub_username, inputs.image_name) || '' }}
             ${{ inputs.push_to_ghcr && format('ghcr.io/{0}/{1}', github.repository_owner, inputs.image_name) || '' }}
+            ${{ inputs.push_to_dockerhub && format('{0}/{1}', inputs.dockerhub_username, inputs.image_name) || '' }}
+            ${{ inputs.push_to_aliyun && format('{0}/{1}/{2}', inputs.aliyun_registry, inputs.aliyun_namespace, inputs.image_name) || '' }}
           tags: |
             type=ref,event=tag
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             ${{ inputs.tag_latest && 'type=raw,value=latest,enable={{is_default_branch}}' || '' }}
+            ${{ inputs.tag_sha && 'type=sha,format=short' || '' }}
+            ${{ inputs.fetch_upstream_versions && format('type=raw,value={0}', steps.upstream.outputs.combo_tag) || '' }}
+            ${{ inputs.custom_tags }}
+
+      - name: 合并构建参数
+        id: buildargs
+        run: |
+          # 合并用户传入的构建参数和上游版本参数
+          USER_ARGS='${{ inputs.build_args }}'
+          UPSTREAM_ARGS='${{ steps.upstream.outputs.build_args || '{}' }}'
+          
+          MERGED=$(python3 -c "
+          import json
+          user = json.loads('$USER_ARGS')
+          upstream = json.loads('$UPSTREAM_ARGS')
+          merged = {**user, **upstream}
+          for k, v in merged.items():
+              print(f'{k}={v}')
+          ")
+          
+          echo "merged_args<<EOF" >> $GITHUB_OUTPUT
+          echo "$MERGED" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ${{ inputs.build_context }}
           file: ${{ inputs.dockerfile_path }}
           platforms: ${{ inputs.platforms }}
           push: true
+          provenance: ${{ inputs.provenance }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: ${{ fromJson(inputs.build_args) }}
+          build-args: ${{ steps.buildargs.outputs.merged_args }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
