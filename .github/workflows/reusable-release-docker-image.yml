@@ -102,27 +102,25 @@ jobs:
       - name: 获取上游项目版本
         id: upstream
         if: ${{ inputs.fetch_upstream_versions }}
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           # 解析上游仓库列表
           export REPOS_JSON='${{ inputs.upstream_repos }}'
           COMBO_TAG=""
           BUILD_ARGS_JSON='{}'
           
-          # 用 python + curl 调用 GitHub API 获取版本（不依赖 gh CLI）
+          echo "上游仓库: $REPOS_JSON"
+          
+          # 用 python + curl 调用 GitHub API 获取版本（public 仓库不需要认证）
           VERSIONS=$(python3 << 'PYEOF'
           import json, sys, subprocess, os
           
           repos_json = os.environ.get('REPOS_JSON', '[]')
-          token = os.environ.get('GH_TOKEN', '')
           repos = json.loads(repos_json)
           
           for repo in repos:
               try:
-                  # 使用 curl 调用 GitHub API
-                  cmd = ['curl', '-s', '-L',
-                         '-H', f'Authorization: token {token}',
+                  # 使用 curl 调用 GitHub API（public 仓库不需要认证）
+                  cmd = ['curl', '-s', '-L', '--fail',
                          '-H', 'Accept: application/vnd.github.v3+json',
                          f'https://api.github.com/repos/{repo}/releases/latest']
                   result = subprocess.run(cmd, capture_output=True, text=True, check=True)
@@ -134,11 +132,19 @@ jobs:
                       sys.exit(1)
                   repo_name = repo.split('/')[-1]
                   print(f'{repo_name}={ver}')
+                  print(f'获取到 {repo_name} 版本: {ver}', file=sys.stderr)
+              except subprocess.CalledProcessError as e:
+                  print(f'ERROR: API 请求失败 {repo}: {e}', file=sys.stderr)
+                  print(f'stderr: {e.stderr}', file=sys.stderr)
+                  sys.exit(1)
               except Exception as e:
                   print(f'ERROR: Failed to get version for {repo}: {e}', file=sys.stderr)
                   sys.exit(1)
           PYEOF
           )
+          
+          echo "获取到的版本:"
+          echo "$VERSIONS"
           
           # 设置输出变量
           echo "$VERSIONS" >> $GITHUB_OUTPUT
