@@ -129,7 +129,7 @@ jobs:
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             bin="${bin}.exe"
           fi
-          artifact_name="${{ inputs.binary_name }}-${VERSION}-${{ matrix.artifact_suffix }}"
+          artifact_name="${{ inputs.binary_name }}-v${VERSION}-${{ matrix.artifact_suffix }}"
           cp "$bin" "$artifact_name"
           if [ "${{ matrix.os }}" != "windows-latest" ]; then
             chmod +x "$artifact_name"
