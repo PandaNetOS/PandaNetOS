@@ -105,13 +105,10 @@ jobs:
         run: |
           # 解析上游仓库列表
           REPOS_JSON='${{ inputs.upstream_repos }}'
-          COMBO_TAG=""
-          BUILD_ARGS_JSON='{}'
           
           echo "上游仓库: $REPOS_JSON"
           
-          # 用 curl + jq 调用 GitHub API 获取版本（public 仓库不需要认证）
-          VERSIONS=""
+          # 用 curl + jq 调用 GitHub API 获取版本，直接写入 GITHUB_OUTPUT
           for repo in $(echo "$REPOS_JSON" | jq -r '.[]'); do
             echo "获取 $repo 版本..."
             ver=$(curl -s -L --fail               -H "Accept: application/vnd.github.v3+json"               "https://api.github.com/repos/$repo/releases/latest" | jq -r '.tag_name | ltrimstr("v")')
@@ -120,34 +117,29 @@ jobs:
               exit 1
             fi
             repo_name=$(echo "$repo" | cut -d'/' -f2)
-            VERSIONS="${VERSIONS}${repo_name}=${ver}"$'\n'
+            echo "${repo_name}=${ver}" >> $GITHUB_OUTPUT
             echo "获取到 $repo_name 版本: $ver"
           done
-          
-          # 去掉最后一个换行
-          VERSIONS=$(echo -e "$VERSIONS" | grep -v '^$')
-          
-          echo "获取到的版本:"
-          echo "$VERSIONS"
-          
-          # 设置输出变量
-          echo "$VERSIONS" >> $GITHUB_OUTPUT
           
           # 生成组合标签
           if [ -n "${{ inputs.combo_tag_format }}" ]; then
             COMBO_TAG="${{ inputs.combo_tag_format }}"
             while IFS='=' read -r key value; do
+              [ -z "$key" ] && continue
               COMBO_TAG=$(echo "$COMBO_TAG" | sed "s/{$key}/$value/g")
-            done <<< "$VERSIONS"
+            done < $GITHUB_OUTPUT
             echo "combo_tag=$COMBO_TAG" >> $GITHUB_OUTPUT
             echo "Combo tag: $COMBO_TAG"
           fi
           
           # 生成构建参数
+          BUILD_ARGS_JSON='{}'
           while IFS='=' read -r key value; do
+            [ -z "$key" ] && continue
             BUILD_ARGS_JSON=$(echo "$BUILD_ARGS_JSON" | jq --arg k "${key^^}_VERSION" --arg v "$value" '. + {($k): $v}')
-          done <<< "$VERSIONS"
+          done < $GITHUB_OUTPUT
           echo "build_args=$BUILD_ARGS_JSON" >> $GITHUB_OUTPUT
+          echo "Build args: $BUILD_ARGS_JSON"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
