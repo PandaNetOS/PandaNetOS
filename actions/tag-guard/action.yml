@@ -1,0 +1,209 @@
+name: PandaNetOS Tag Guard
+description: 标签守卫 - 校验 tag 格式、版本一致性和 CI 状态，失败时自动删除 tag
+author: PandaNetOS
+
+inputs:
+  cargo-toml-path:
+    description: 'Cargo.toml 文件路径'
+    required: false
+    default: 'Cargo.toml'
+  delete-on-failure:
+    description: '校验失败时是否自动删除 tag'
+    required: false
+    default: 'true'
+  check-ci-status:
+    description: '是否校验 tag 指向 commit 的 CI 状态'
+    required: false
+    default: 'true'
+  required-checks:
+    description: '必须通过的检查名称（逗号分隔），为空则检查所有 completed 的 check'
+    required: false
+    default: ''
+  github-token:
+    description: 'GitHub Token（用于删除 tag 和查询 CI 状态）'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 校验是否为 tag 创建事件
+      id: event-check
+      shell: bash
+      run: |
+        if [ "${{ github.event_name }}" != "create" ] || [ "${{ github.ref_type }}" != "tag" ]; then
+          echo "⚠️  非 tag 创建事件，跳过校验"
+          echo "skip=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        echo "✅ 检测到 tag 创建事件: ${{ github.ref_name }}"
+        echo "skip=false" >> $GITHUB_OUTPUT
+
+    - name: 校验 Tag 格式
+      id: tag-format
+      if: steps.event-check.outputs.skip == 'false'
+      shell: bash
+      run: |
+        TAG_NAME="${{ github.ref_name }}"
+        if [[ ! "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "❌ Tag 格式错误: $TAG_NAME"
+          echo "   必须是 vX.Y.Z 格式（语义化版本）"
+          echo "valid=false" >> $GITHUB_OUTPUT
+          echo "reason=tag_format_error" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        TAG_VERSION="${TAG_NAME#v}"
+        echo "✅ Tag 格式正确: v$TAG_VERSION"
+        echo "valid=true" >> $GITHUB_OUTPUT
+        echo "tag_version=$TAG_VERSION" >> $GITHUB_OUTPUT
+
+    - name: 校验 Cargo.toml 版本一致性
+      id: version-check
+      if: steps.event-check.outputs.skip == 'false' && steps.tag-format.outputs.valid == 'true'
+      shell: bash
+      run: |
+        TAG_VERSION="${{ steps.tag-format.outputs.tag_version }}"
+        CARGO_FILE="${{ inputs.cargo-toml-path }}"
+        
+        if [ ! -f "$CARGO_FILE" ]; then
+          echo "❌ 找不到 Cargo.toml: $CARGO_FILE"
+          echo "valid=false" >> $GITHUB_OUTPUT
+          echo "reason=cargo_file_not_found" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        CARGO_VERSION=$(grep '^version' "$CARGO_FILE" | head -1 | sed 's/version[[:space:]]*=[[:space:]]*"//;s/"//')
+        
+        if [ -z "$CARGO_VERSION" ]; then
+          echo "❌ 无法从 $CARGO_FILE 中读取版本号"
+          echo "valid=false" >> $GITHUB_OUTPUT
+          echo "reason=cargo_version_empty" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        if [ "$TAG_VERSION" != "$CARGO_VERSION" ]; then
+          echo "❌ 版本号不一致！"
+          echo "   Tag 版本:  v$TAG_VERSION"
+          echo "   Cargo 版本: $CARGO_VERSION"
+          echo ""
+          echo "   请先执行以下步骤："
+          echo "   1. 修改 $CARGO_FILE 中的 version 为 \"$TAG_VERSION\""
+          echo "   2. 提交并合并到 main 分支"
+          echo "   3. 确认 main 分支 CI 全部通过"
+          echo "   4. 重新打 tag v$TAG_VERSION"
+          echo "valid=false" >> $GITHUB_OUTPUT
+          echo "reason=version_mismatch" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        echo "✅ 版本号一致: tag=v$TAG_VERSION, cargo=$CARGO_VERSION"
+        echo "valid=true" >> $GITHUB_OUTPUT
+
+    - name: 校验 CI 状态
+      id: ci-check
+      if: steps.event-check.outputs.skip == 'false' && steps.tag-format.outputs.valid == 'true' && steps.version-check.outputs.valid == 'true' && inputs.check-ci-status == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        COMMIT_SHA="${{ github.sha }}"
+        REPO="${{ github.repository }}"
+        echo "🔍 正在校验 commit $COMMIT_SHA 的 CI 状态..."
+        
+        # 查询 check-runs
+        CHECKS_JSON=$(gh api "/repos/$REPO/commits/$COMMIT_SHA/check-runs" 2>/dev/null || echo "{}")
+        TOTAL_COUNT=$(echo "$CHECKS_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin).get('total_count', 0))" 2>/dev/null || echo "0")
+        
+        if [ "$TOTAL_COUNT" = "0" ]; then
+          echo "⚠️  未找到任何 check-runs，跳过 CI 状态校验"
+          echo "valid=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        # 筛选 required checks 或所有 checks
+        REQUIRED="${{ inputs.required-checks }}"
+        if [ -n "$REQUIRED" ]; then
+          echo "📋 校验指定的 required checks: $REQUIRED"
+          FAILED=""
+          for CHECK_NAME in $(echo "$REQUIRED" | tr ',' ' '); do
+            CONCLUSION=$(echo "$CHECKS_JSON" | python3 -c "
+import json,sys
+data = json.load(sys.stdin)
+name = '$CHECK_NAME'
+for run in data.get('check_runs', []):
+    if run['name'] == name:
+        print(run.get('conclusion', 'pending'))
+        break
+else:
+    print('not_found')
+" 2>/dev/null)
+            if [ "$CONCLUSION" != "success" ]; then
+              FAILED="$FAILED\n  ❌ $CHECK_NAME: $CONCLUSION"
+            else
+              echo "  ✅ $CHECK_NAME: success"
+            fi
+          done
+        else
+          echo "📋 校验所有 check-runs..."
+          FAILED=$(echo "$CHECKS_JSON" | python3 -c "
+import json,sys
+data = json.load(sys.stdin)
+failed = []
+for run in data.get('check_runs', []):
+    name = run['name']
+    status = run.get('status', 'unknown')
+    conclusion = run.get('conclusion', 'pending')
+    if status == 'completed' and conclusion != 'success':
+        failed.append(f'  ❌ {name}: {conclusion}')
+    elif status != 'completed':
+        failed.append(f'  ⏳ {name}: {status} (未完成)')
+    else:
+        print(f'  ✅ {name}: success')
+print('\n'.join(failed))
+" 2>/dev/null)
+        fi
+        
+        if [ -n "$FAILED" ]; then
+          echo ""
+          echo "❌ CI 状态校验未通过："
+          echo -e "$FAILED"
+          echo "valid=false" >> $GITHUB_OUTPUT
+          echo "reason=ci_check_failed" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        echo "✅ CI 状态校验通过"
+        echo "valid=true" >> $GITHUB_OUTPUT
+
+    - name: 校验失败时自动删除 tag
+      id: delete-tag
+      if: steps.event-check.outputs.skip == 'false' && (steps.tag-format.outputs.valid == 'false' || steps.version-check.outputs.valid == 'false' || steps.ci-check.outputs.valid == 'false') && inputs.delete-on-failure == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        TAG_NAME="${{ github.ref_name }}"
+        REPO="${{ github.repository }}"
+        echo "🗑️  正在删除错误的 tag: $TAG_NAME"
+        gh api -X DELETE "/repos/$REPO/git/refs/tags/$TAG_NAME" 2>/dev/null && echo "✅ Tag 已删除: $TAG_NAME" || echo "⚠️  删除 tag 失败（可能已被删除）"
+        echo ""
+        echo "========================================"
+        echo "  ❌ Tag 校验未通过，已自动删除"
+        echo "  Tag: $TAG_NAME"
+        echo "  错误原因:"
+        echo "    - Tag 格式: ${{ steps.tag-format.outputs.valid }}"
+        echo "    - 版本一致: ${{ steps.version-check.outputs.valid }}"
+        echo "    - CI 状态: ${{ steps.ci-check.outputs.valid }}"
+        echo "========================================"
+        exit 1
+
+    - name: 校验通过
+      if: steps.event-check.outputs.skip == 'false' && steps.tag-format.outputs.valid == 'true' && steps.version-check.outputs.valid == 'true' && (steps.ci-check.outputs.valid == 'true' || inputs.check-ci-status == 'false')
+      shell: bash
+      run: |
+        echo "========================================"
+        echo "  ✅ Tag 校验全部通过"
+        echo "  Tag: ${{ github.ref_name }}"
+        echo "  - Tag 格式: ✅"
+        echo "  - 版本一致: ✅"
+        echo "  - CI 状态: ✅"
+        echo "========================================"
