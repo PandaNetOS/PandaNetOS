@@ -50,9 +50,21 @@ cd "$PROJECT_DIR"
 
 # ---- 项目类型检测 ----
 IS_RUST_PROJECT=0
+IS_WORKSPACE_PROJECT=0
+IS_PANDANETOS_STDLIB=0
+
 if [ -f "Cargo.toml" ]; then
   IS_RUST_PROJECT=1
-  echo "项目类型: Rust 项目"
+  if grep -q '\[workspace\]' Cargo.toml; then
+    IS_WORKSPACE_PROJECT=1
+    echo "项目类型: Rust Workspace 项目"
+  else
+    echo "项目类型: Rust 项目"
+  fi
+  if [ -d "crates/pandanetos" ] && [ -f "scripts/check_compliance.sh" ]; then
+    IS_PANDANETOS_STDLIB=1
+    echo "检测到 PandaNetOS 标准库本身，跳过自引用检查"
+  fi
 else
   echo "项目类型: 非 Rust 项目"
 fi
@@ -64,6 +76,8 @@ section "1/10" "标准库依赖检查"
 
 if [ "$IS_RUST_PROJECT" -eq 0 ]; then
   skip "非 Rust 项目，跳过"
+elif [ "$IS_PANDANETOS_STDLIB" -eq 1 ]; then
+  skip "PandaNetOS 标准库本身，跳过 pandanetos 自引用检查"
 else
   if grep -qE 'pandanetos\s*=\s*\{[^}]*path\s*=\s*"\.\./PandaNetOS/crates/pandanetos"' Cargo.toml; then
     pass "使用 path 依赖 pandanetos"
@@ -89,20 +103,28 @@ fi
 # =============================================================================
 section "2/10" "目录布局检查"
 
-if [ -d "../PandaNetOS/crates/pandanetos" ]; then
+if [ "$IS_PANDANETOS_STDLIB" -eq 1 ]; then
+  pass "PandaNetOS 标准库本身，跳过同级目录检查"
+elif [ -d "../PandaNetOS/crates/pandanetos" ]; then
   pass "PandaNetOS 标准库存在于同级目录"
 else
   fail "未找到 ../PandaNetOS/crates/pandanetos"
 fi
 
-if [ "$IS_RUST_PROJECT" -eq 1 ]; then
+if [ "$IS_RUST_PROJECT" -eq 0 ]; then
+  skip "非 Rust 项目，跳过 src/ 检查"
+elif [ "$IS_WORKSPACE_PROJECT" -eq 1 ]; then
+  if [ -d "src" ] || ls crates/*/src 1>/dev/null 2>&1; then
+    pass "Workspace 项目 src/ 目录存在（根目录或 crates/*/src）"
+  else
+    fail "Workspace 项目 src/ 目录不存在（需要根目录 src/ 或 crates/*/src）"
+  fi
+else
   if [ -d "src" ]; then
     pass "src/ 目录存在"
   else
     fail "src/ 目录不存在"
   fi
-else
-  skip "非 Rust 项目，跳过 src/ 检查"
 fi
 
 # =============================================================================

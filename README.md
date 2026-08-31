@@ -4,6 +4,71 @@
 
 PandaNetOS 是 pandanetos 项目群的**架构标准、通信协议、共享代码**的统一管理仓库。所有子项目（pk、spde、pcdn-keeper 等）都必须遵循本仓库定义的标准。
 
+## 功能特性
+
+- **统一架构标准**：四层架构、依赖规则、模块划分，所有项目遵循同一套架构规范
+- **统一通信协议**：RESTful API、WebSocket 消息格式、节点通信协议，确保组件间无缝对接
+- **统一数据标准**：JSON 字段命名、时间格式、字节单位、错误码，消除数据格式歧义
+- **统一工程标准**：配置加载、结构化日志、CI/CD 流程、代码质量检查，提升开发效率
+- **Rust 共享标准库**：`pandanetos` crate，包含错误类型、响应格式、协议定义、领域模型、工具函数
+- **统一发版系统**：Reusable Workflows，支持 Rust 二进制、Docker 镜像、Rust 库、前端四种项目类型
+- **Tag Guard 发版校验**：自动校验 tag 格式、版本一致性、CI 状态，失败自动删除 tag
+- **合规检查脚本**：10 项合规检查，强制所有项目遵循统一标准
+
+## 标准库路径约定
+
+各项目仓库与 `PandaNetOS` 仓库必须放在**同一父目录**下：
+
+```
+<workspace>/
+├── PandaNetOS/              # 本仓库（标准库）
+│   └── crates/pandanetos/
+├── pk/                      # 主控台
+├── spde/                    # 下载节点
+└── pcdn-keeper/             # Docker 封装
+```
+
+各项目 `Cargo.toml` 中统一使用 path 依赖：
+
+```toml
+[dependencies]
+pandanetos = { path = "../PandaNetOS/crates/pandanetos" }
+```
+
+> **禁止**在项目内维护私有协议常量、私有错误码或私有响应格式；全部复用 `pandanetos`。
+
+## 快速开始
+
+### 环境要求
+
+- Rust 1.75+
+- Git
+- 各项目仓库与 PandaNetOS 放在同一父目录
+
+### 安装
+
+克隆 PandaNetOS 标准库到本地：
+
+```bash
+cd <workspace>
+git clone https://github.com/PandaNetOS/PandaNetOS.git
+```
+
+### 使用示例
+
+在你的 Rust 项目中添加依赖：
+
+```toml
+[dependencies]
+pandanetos = { path = "../PandaNetOS/crates/pandanetos" }
+```
+
+然后在代码中导入：
+
+```rust
+use pandanetos::prelude::*;
+```
+
 ## 生态项目
 
 | 项目 | 角色 | 仓库 |
@@ -69,39 +134,6 @@ PandaNetOS 是 pandanetos 项目群的**架构标准、通信协议、共享代�
 
 Rust 共享标准库，所有项目共同依赖。
 
-#### 依赖方式
-
-**本地开发（强制 path 依赖，目录布局固定）：**
-
-各项目仓库与 `PandaNetOS` 仓库必须放在**同一父目录**下：
-
-```
-<workspace>/
-├── PandaNetOS/              # 本仓库（标准库）
-│   └── crates/pandanetos/
-├── pk/                      # 主控台
-├── spde/                    # 下载节点
-└── pcdn-keeper/             # Docker 封装
-```
-
-各项目 `Cargo.toml` 中统一写：
-
-```toml
-[dependencies]
-pandanetos = { path = "../PandaNetOS/crates/pandanetos" }
-```
-
-> **禁止**在项目内维护私有协议常量、私有错误码或私有响应格式；全部复用 `pandanetos`。
-
-**CI / 发布构建（git 依赖）：**
-
-GitHub Actions 中自动 checkout 本仓库并修正 path 依赖，或直接使用 git 依赖：
-
-```toml
-[dependencies]
-pandanetos = { git = "https://github.com/PandaNetOS/PandaNetOS", branch = "main" }
-```
-
 #### 包含模块
 
 - `error` - 统一错误类型、错误码（7 大领域，含 HTTP 状态码映射）
@@ -120,11 +152,25 @@ pandanetos = { git = "https://github.com/PandaNetOS/PandaNetOS", branch = "main"
 use pandanetos::prelude::*;
 ```
 
-## 版本管理
+## 开发指南
 
-- 语义化版本：`vMAJOR.MINOR.PATCH`
-- 所有项目版本独立，但通信协议变更需同步升级
-- 打 tag 自动触发 CI 构建和发版
+### 构建
+
+```bash
+cargo build --release
+```
+
+### 测试
+
+```bash
+cargo test --all
+```
+
+### 合规检查
+
+```bash
+bash scripts/check_compliance.sh .
+```
 
 ## 贡献指南
 
@@ -132,7 +178,15 @@ use pandanetos::prelude::*;
 2. 标准确定后再在各子项目实现
 3. 所有代码必须通过 `cargo fmt` 和 `cargo clippy`
 4. 遵循本仓库定义的所有标准
+5. 提交前运行合规检查，确保所有检查项通过
 
-## License
+## 版本管理
 
-MIT
+- 语义化版本：`vMAJOR.MINOR.PATCH`
+- 所有项目版本独立，但通信协议变更需同步升级
+- 打 tag 自动触发 CI 构建和发版
+- Tag Guard 自动校验 tag 格式、版本一致性和 CI 状态
+
+## 许可证
+
+MIT License
