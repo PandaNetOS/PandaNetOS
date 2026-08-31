@@ -254,8 +254,8 @@ else
     ORDER_ERROR=0
     
     for STD_NAME in "${STANDARD_ORDER[@]}"; do
-      LINE_NUM=$(echo "$SECTIONS" | grep -E "## .*${STD_NAME}" | head -1 | cut -d: -f1)
-      if [ -n "$LINE_NUM" ]; then
+      LINE_NUM=$(echo "$SECTIONS" | grep -E "## .*${STD_NAME}" 2>/dev/null | head -1 | cut -d: -f1 || true)
+      if [ -n "$LINE_NUM" ] && [[ "$LINE_NUM" =~ ^[0-9]+$ ]]; then
         if [ "$LINE_NUM" -lt "$PREV_LINE" ]; then
           fail "README 章节顺序错误：「${STD_NAME}」在「${PREV_NAME}」之前"
           ORDER_ERROR=$((ORDER_ERROR + 1))
