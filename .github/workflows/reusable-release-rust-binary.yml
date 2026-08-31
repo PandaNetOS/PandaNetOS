@@ -1,0 +1,168 @@
+name: Reusable Release - Rust Binary
+
+on:
+  workflow_call:
+    inputs:
+      binary_name:
+        description: "二进制名称（如 spde、pk）"
+        required: true
+        type: string
+      project_name:
+        description: "项目名称（如 SPDE、PK）"
+        required: true
+        type: string
+      build_matrix:
+        description: "构建平台矩阵（JSON 格式）"
+        required: false
+        type: string
+        default: '[{"os":"windows-latest","target":"x86_64-pc-windows-msvc","artifact_suffix":"x86_64-windows.exe","cross":false},{"os":"ubuntu-latest","target":"x86_64-unknown-linux-musl","artifact_suffix":"x86_64-linux-musl","cross":true},{"os":"ubuntu-latest","target":"aarch64-unknown-linux-musl","artifact_suffix":"aarch64-linux-musl","cross":true},{"os":"macos-latest","target":"x86_64-apple-darwin","artifact_suffix":"x86_64-macos","cross":false},{"os":"macos-latest","target":"aarch64-apple-darwin","artifact_suffix":"aarch64-macos","cross":false}]'
+      enable_sccache:
+        description: "是否启用 sccache 缓存"
+        required: false
+        type: boolean
+        default: true
+      dispatch_downstream:
+        description: "是否通知下游项目重建"
+        required: false
+        type: boolean
+        default: false
+      downstream_repo:
+        description: "下游仓库名（如 pcdn-keeper）"
+        required: false
+        type: string
+        default: ""
+      downstream_event_type:
+        description: "下游事件类型"
+        required: false
+        type: string
+        default: "upstream-release"
+    secrets:
+      PAT_FOR_DOWNSTREAM:
+        description: "通知下游项目的 PAT"
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(inputs.build_matrix) }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Checkout PandaNetOS
+        uses: actions/checkout@v4
+        with:
+          repository: PandaNetOS/PandaNetOS
+          path: PandaNetOS
+
+      - name: Move PandaNetOS to parent directory
+        shell: bash
+        run: mv PandaNetOS ../PandaNetOS
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install sccache
+        if: ${{ inputs.enable_sccache && !matrix.cross }}
+        uses: mozilla-actions/sccache-action@v0.0.6
+
+      - name: Cache sccache
+        if: ${{ inputs.enable_sccache && !matrix.cross }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/sccache
+            ~/Library/Caches/Mozilla.sccache
+            ~/AppData/Local/Mozilla/sccache/cache
+          key: sccache-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            sccache-${{ matrix.target }}-
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.cross
+        uses: taiki-e/install-action@cross
+
+      - name: Setup perl for Windows
+        if: matrix.os == 'windows-latest'
+        uses: shogo82148/actions-setup-perl@v1
+        with:
+          perl-version: '5.36'
+
+      - name: Build with cross (Linux musl)
+        if: matrix.cross
+        shell: bash
+        run: |
+          cp -r ../PandaNetOS ./PandaNetOS
+          sed -i 's|../PandaNetOS|PandaNetOS|g' Cargo.toml
+          cross build --release --target ${{ matrix.target }}
+
+      - name: Build with sccache (Windows/macOS)
+        if: ${{ !matrix.cross }}
+        env:
+          RUSTC_WRAPPER: sccache
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package binary
+        id: package
+        shell: bash
+        run: |
+          VERSION="${{ github.ref_name }}"
+          bin="target/${{ matrix.target }}/release/${{ inputs.binary_name }}"
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            bin="${bin}.exe"
+          fi
+          artifact_name="${{ inputs.binary_name }}-${VERSION}-${{ matrix.artifact_suffix }}"
+          cp "$bin" "$artifact_name"
+          if [ "${{ matrix.os }}" != "windows-latest" ]; then
+            chmod +x "$artifact_name"
+          fi
+          echo "artifact_name=$artifact_name" >> $GITHUB_OUTPUT
+          echo "Packaged: $artifact_name"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.artifact_name }}
+          path: ${{ steps.package.outputs.artifact_name }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ inputs.project_name }} ${{ github.ref_name }}
+          generate_release_notes: true
+          files: ${{ inputs.binary_name }}-v*
+
+  dispatch-downstream:
+    needs: release
+    if: ${{ inputs.dispatch_downstream && inputs.downstream_repo != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger downstream rebuild
+        run: |
+          curl -sS -X POST \
+            -H "Authorization: token ${{ secrets.PAT_FOR_DOWNSTREAM }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository_owner }}/${{ inputs.downstream_repo }}/dispatches \
+            -d '{"event_type":"${{ inputs.downstream_event_type }}","client_payload":{"upstream":"${{ inputs.binary_name }}","version":"${{ github.ref_name }}"}}'
