@@ -5,27 +5,25 @@ author: PandaNetOS
 inputs:
   cargo-toml-path:
     description: 'Cargo.toml 文件路径'
-    required: false
+    required: true
     default: 'Cargo.toml'
   delete-on-failure:
     description: '校验失败时是否自动删除 tag'
-    required: false
+    required: true
     default: 'true'
   check-ci-status:
     description: '是否校验 tag 指向 commit 的 CI 状态'
-    required: false
+    required: true
     default: 'true'
   required-checks:
     description: '必须通过的检查名称（逗号分隔），为空则检查所有 completed 的 check'
-    required: false
-    default: ''
+    required: true
   github-token:
     description: 'GitHub Token（用于删除 tag 和查询 CI 状态）'
     required: true
   dispatch-token:
     description: '用于触发 Release workflow 的 Token（需要 PAT，因为 GITHUB_TOKEN 无法触发 workflow_dispatch）'
-    required: false
-    default: ''
+    required: true
 
 runs:
   using: 'composite'
@@ -107,7 +105,7 @@ runs:
       if: steps.event-check.outputs.skip == 'false' && steps.tag-format.outputs.valid == 'true' && steps.version-check.outputs.valid == 'true' && inputs.check-ci-status == 'true'
       shell: bash
       env:
-        GH_TOKEN: ${{ inputs.dispatch-token || inputs.github-token }}
+        GH_TOKEN: ${{ inputs.dispatch-token }}
       run: |
         COMMIT_SHA="${{ github.sha }}"
         REPO="${{ github.repository }}"
