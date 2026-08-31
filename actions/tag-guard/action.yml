@@ -22,6 +22,14 @@ inputs:
   github-token:
     description: 'GitHub Token（用于删除 tag 和查询 CI 状态）'
     required: true
+  trigger-release:
+    description: '校验通过后是否触发 Release workflow'
+    required: false
+    default: 'true'
+  release-workflow:
+    description: 'Release workflow 文件名'
+    required: false
+    default: 'release.yml'
 
 runs:
   using: 'composite'
@@ -173,6 +181,7 @@ runs:
 
     - name: 校验通过
       if: steps.event-check.outputs.skip == 'false' && steps.tag-format.outputs.valid == 'true' && steps.version-check.outputs.valid == 'true' && (steps.ci-check.outputs.valid == 'true' || inputs.check-ci-status == 'false')
+      id: validation-pass
       shell: bash
       run: |
         echo "========================================"
@@ -182,3 +191,43 @@ runs:
         echo "  - 版本一致: ✅"
         echo "  - CI 状态: ✅"
         echo "========================================"
+        TAG_VERSION="${{ github.ref_name }}"
+        TAG_VERSION="${TAG_VERSION#v}"
+        echo "version=$TAG_VERSION" >> $GITHUB_OUTPUT
+
+    - name: 触发 Release workflow
+      if: steps.validation-pass.conclusion == 'success' && inputs.trigger-release == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        REPO="${{ github.repository }}"
+        WORKFLOW="${{ inputs.release-workflow }}"
+        VERSION="${{ steps.validation-pass.outputs.version }}"
+        REF="${{ github.ref_name }}"
+        
+        echo "🚀 正在触发 Release workflow: $WORKFLOW"
+        echo "   仓库: $REPO"
+        echo "   版本: v$VERSION"
+        echo "   引用: $REF"
+        
+        # 查询 workflow ID
+        WORKFLOW_ID=$(gh api "/repos/$REPO/actions/workflows" 2>/dev/null | python3 -c "import json,sys; data=json.load(sys.stdin); [print(w['id']) for w in data.get('workflows',[]) if w['path'].endswith('$WORKFLOW') or w['name']=='$WORKFLOW']" 2>/dev/null | head -1)
+        
+        if [ -z "$WORKFLOW_ID" ]; then
+          echo "❌ 找不到 workflow: $WORKFLOW"
+          exit 1
+        fi
+        
+        echo "   Workflow ID: $WORKFLOW_ID"
+        
+        # 触发 workflow_dispatch
+        gh api -X POST "/repos/$REPO/actions/workflows/$WORKFLOW_ID/dispatches"           -f ref="main"           -f inputs="{"version":"$VERSION"}" 2>/dev/null
+        
+        if [ $? -eq 0 ]; then
+          echo "✅ Release workflow 已触发"
+          echo "   查看: https://github.com/$REPO/actions/workflows/$WORKFLOW"
+        else
+          echo "❌ 触发 Release workflow 失败"
+          exit 1
+        fi
