@@ -216,18 +216,8 @@ runs:
         echo "   版本: v$VERSION"
         echo "   引用: $REF"
         
-        # 查询 workflow ID
-        WORKFLOW_ID=$(gh api "/repos/$REPO/actions/workflows" 2>/dev/null | python3 -c "import json,sys; data=json.load(sys.stdin); [print(w['id']) for w in data.get('workflows',[]) if w['path'].endswith('$WORKFLOW') or w['name']=='$WORKFLOW']" 2>/dev/null | head -1)
-        
-        if [ -z "$WORKFLOW_ID" ]; then
-          echo "❌ 找不到 workflow: $WORKFLOW"
-          exit 1
-        fi
-        
-        echo "   Workflow ID: $WORKFLOW_ID"
-        
-        # 触发 workflow_dispatch
-        gh api -X POST "/repos/$REPO/actions/workflows/$WORKFLOW_ID/dispatches"           -f ref="main"           -f inputs="{"version":"$VERSION"}" 2>/dev/null
+        # 使用 gh workflow run 触发 workflow_dispatch（更简单，不容易出错）
+        gh workflow run "$WORKFLOW" --ref main -f version="$VERSION" 2>&1
         
         if [ $? -eq 0 ]; then
           echo "✅ Release workflow 已触发"
