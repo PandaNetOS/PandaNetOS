@@ -55,6 +55,15 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
+      - name: 临时更新 Cargo.toml 版本号（不提交）
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Tag: $GITHUB_REF_NAME, Version: $VERSION"
+          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
+          echo "更新后的 Cargo.toml 版本号:"
+          grep "^version" Cargo.toml
+
       - name: Checkout PandaNetOS
         uses: actions/checkout@v4
         with:
@@ -153,6 +162,65 @@ jobs:
           name: ${{ inputs.project_name }} ${{ github.ref_name }}
           generate_release_notes: true
           files: ${{ inputs.binary_name }}-v*
+
+  update-version:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_FOR_DOWNSTREAM }}
+
+      - name: 提取版本号
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Tag: $GITHUB_REF_NAME, Version: $VERSION"
+
+      - name: 检查版本号是否需要更新
+        id: check
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          CURRENT=$(grep "^version" Cargo.toml | sed 's/version = "//;s/"//')
+          echo "当前版本号: $CURRENT, 目标版本号: $VERSION"
+          if [ "$CURRENT" = "$VERSION" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "版本号已经是最新的，跳过更新"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "需要更新版本号"
+          fi
+
+      - name: 创建分支并更新 Cargo.toml
+        if: steps.check.outputs.skip == 'false'
+        id: branch
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BRANCH="chore/update-version-to-v$VERSION"
+          git checkout -b "$BRANCH"
+          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
+          git config user.name "pandamelive"
+          git config user.email "pandamelive@users.noreply.github.com"
+          git add Cargo.toml
+          git commit -m "chore: 更新版本号到 v$VERSION"
+          git push origin "$BRANCH"
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          echo "已创建分支: $BRANCH"
+
+      - name: 创建 PR
+        if: steps.check.outputs.skip == 'false'
+        uses: repo-sync/pull-request@v2
+        with:
+          source_branch: ${{ steps.branch.outputs.branch }}
+          destination_branch: "main"
+          pr_title: "chore: 更新版本号到 v${{ steps.version.outputs.version }}"
+          pr_body: |
+            自动更新 Cargo.toml 版本号到 v${{ steps.version.outputs.version }}
+            
+            由 release workflow 自动创建，auto-approve App 将自动审批并合并。
+          github_token: ${{ secrets.PAT_FOR_DOWNSTREAM }}
 
   dispatch-downstream:
     needs: release
