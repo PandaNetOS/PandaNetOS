@@ -104,44 +104,28 @@ jobs:
         if: ${{ inputs.fetch_upstream_versions }}
         run: |
           # 解析上游仓库列表
-          export REPOS_JSON='${{ inputs.upstream_repos }}'
+          REPOS_JSON='${{ inputs.upstream_repos }}'
           COMBO_TAG=""
           BUILD_ARGS_JSON='{}'
           
           echo "上游仓库: $REPOS_JSON"
           
-          # 用 python + curl 调用 GitHub API 获取版本（public 仓库不需要认证）
-          VERSIONS=$(python3 << 'PYEOF'
-import json, sys, subprocess, os
-
-repos_json = os.environ.get('REPOS_JSON', '[]')
-repos = json.loads(repos_json)
-
-for repo in repos:
-    try:
-        # 使用 curl 调用 GitHub API（public 仓库不需要认证）
-        cmd = ['curl', '-s', '-L', '--fail',
-               '-H', 'Accept: application/vnd.github.v3+json',
-               f'https://api.github.com/repos/{repo}/releases/latest']
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        data = json.loads(result.stdout)
-        tag_name = data.get('tag_name', '')
-        ver = tag_name.lstrip('v')
-        if not ver:
-            print(f'ERROR: {repo} 版本号无效: {tag_name}', file=sys.stderr)
-            sys.exit(1)
-        repo_name = repo.split('/')[-1]
-        print(f'{repo_name}={ver}')
-        print(f'获取到 {repo_name} 版本: {ver}', file=sys.stderr)
-    except subprocess.CalledProcessError as e:
-        print(f'ERROR: API 请求失败 {repo}: {e}', file=sys.stderr)
-        print(f'stderr: {e.stderr}', file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:
-        print(f'ERROR: Failed to get version for {repo}: {e}', file=sys.stderr)
-        sys.exit(1)
-PYEOF
-          )
+          # 用 curl + jq 调用 GitHub API 获取版本（public 仓库不需要认证）
+          VERSIONS=""
+          for repo in $(echo "$REPOS_JSON" | jq -r '.[]'); do
+            echo "获取 $repo 版本..."
+            ver=$(curl -s -L --fail               -H "Accept: application/vnd.github.v3+json"               "https://api.github.com/repos/$repo/releases/latest" | jq -r '.tag_name | ltrimstr("v")')
+            if [ -z "$ver" ] || [ "$ver" = "null" ]; then
+              echo "ERROR: 无法获取 $repo 的版本"
+              exit 1
+            fi
+            repo_name=$(echo "$repo" | cut -d'/' -f2)
+            VERSIONS="${VERSIONS}${repo_name}=${ver}"$'\n'
+            echo "获取到 $repo_name 版本: $ver"
+          done
+          
+          # 去掉最后一个换行
+          VERSIONS=$(echo -e "$VERSIONS" | grep -v '^$')
           
           echo "获取到的版本:"
           echo "$VERSIONS"
@@ -161,12 +145,7 @@ PYEOF
           
           # 生成构建参数
           while IFS='=' read -r key value; do
-            BUILD_ARGS_JSON=$(echo "$BUILD_ARGS_JSON" | python3 -c "
-            import json, sys
-            data = json.load(sys.stdin)
-            data['${key^^}_VERSION'] = '$value'
-            print(json.dumps(data))
-            ")
+            BUILD_ARGS_JSON=$(echo "$BUILD_ARGS_JSON" | jq --arg k "${key^^}_VERSION" --arg v "$value" '. + {($k): $v}')
           done <<< "$VERSIONS"
           echo "build_args=$BUILD_ARGS_JSON" >> $GITHUB_OUTPUT
 
