@@ -107,7 +107,7 @@ runs:
       if: steps.event-check.outputs.skip == 'false' && steps.tag-format.outputs.valid == 'true' && steps.version-check.outputs.valid == 'true' && inputs.check-ci-status == 'true'
       shell: bash
       env:
-        GH_TOKEN: ${{ inputs.github-token }}
+        GH_TOKEN: ${{ inputs.dispatch-token || inputs.github-token }}
       run: |
         COMMIT_SHA="${{ github.sha }}"
         REPO="${{ github.repository }}"
