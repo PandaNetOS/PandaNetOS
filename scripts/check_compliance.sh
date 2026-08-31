@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
 # =============================================================================
-# PandaNetOS 生态合规检查脚本
+# PandaNetOS 生态合规检查脚本（v2.0）
 # =============================================================================
 # 所有项目 CI 必须调用本脚本，失败则阻断合并。
 # 本脚本放在 PandaNetOS/scripts/check_compliance.sh，所有项目共用。
 #
-# 支持项目类型：
-#   - Rust 项目（有 Cargo.toml）：全部9项检查
-#   - 非 Rust 项目（Docker/Shell等）：跳过 Rust 相关检查，仅检查通用项（含 Tag Guard）
+# 检查项（共10项）：
+#   1. 标准库依赖检查（Rust 项目强制）
+#   2. 目录布局检查（强制）
+#   3. README 规范检查（强制，统一格式+统一顺序）
+#   4. 代码格式检查（Rust 项目强制）
+#   5. Clippy 检查（Rust 项目强制）
+#   6. 单元测试（Rust 项目强制）
+#   7. 敏感信息检查（强制）
+#   8. 代码规范检查（Rust 项目强制）
+#   9. Tag Guard 工作流检查（强制）
+#  10. CI/CD 工作流完整性检查（强制）
 #
-# 用法：
-#   bash check_compliance.sh <项目根目录>
-#   bash check_compliance.sh .          # 检查当前目录
-#
-# 白名单注释：
-#   // panda-allow: cli-output    允许该行使用 println!（CLI 输出场景）
-#
+# 用法：bash check_compliance.sh <项目根目录>
 # 退出码：0=全部通过，1=存在问题
 # =============================================================================
 
@@ -39,65 +41,60 @@ skip()    { echo -e "${CYAN}  ⏭️  SKIP: $1${RESET}"; }
 section() { echo -e "\n${CYAN}[$1] $2${RESET}"; }
 
 echo "========================================"
-echo " PandaNetOS 生态合规检查"
+echo " PandaNetOS 生态合规检查 v2.0"
 echo " 项目目录: $PROJECT_DIR"
 echo " 检查时间: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 echo "========================================"
 
-# 切换到项目目录
 cd "$PROJECT_DIR"
 
 # ---- 项目类型检测 ----
 IS_RUST_PROJECT=0
 if [ -f "Cargo.toml" ]; then
   IS_RUST_PROJECT=1
-  echo "项目类型: Rust 项目（检测到 Cargo.toml）"
+  echo "项目类型: Rust 项目"
 else
-  echo "项目类型: 非 Rust 项目（未检测到 Cargo.toml，跳过 Rust 相关检查）"
+  echo "项目类型: 非 Rust 项目"
 fi
 
 # =============================================================================
-# [1/9] 标准库依赖检查（Rust 项目强制）
+# [1/10] 标准库依赖检查（Rust 项目强制）
 # =============================================================================
-section "1/8" "标准库依赖检查"
+section "1/10" "标准库依赖检查"
 
 if [ "$IS_RUST_PROJECT" -eq 0 ]; then
-  skip "非 Rust 项目，跳过标准库依赖检查"
+  skip "非 Rust 项目，跳过"
 else
-  # 必须使用 path 依赖
   if grep -qE 'pandanetos\s*=\s*\{[^}]*path\s*=\s*"\.\./PandaNetOS/crates/pandanetos"' Cargo.toml; then
-    pass "Cargo.toml 使用 path 依赖 pandanetos"
+    pass "使用 path 依赖 pandanetos"
   else
-    fail "Cargo.toml 未使用 path 依赖 pandanetos（必须: path = \"../PandaNetOS/crates/pandanetos\"）"
+    fail "未使用 path 依赖 pandanetos"
   fi
 
-  # 禁止本地开发使用 git 依赖
   if grep -qE 'pandanetos\s*=\s*\{[^}]*git\s*=' Cargo.toml; then
-    fail "Cargo.toml 使用了 git 依赖 pandanetos（本地开发必须用 path 依赖，git 依赖仅限 CI 发布构建）"
+    fail "使用了 git 依赖 pandanetos（本地开发必须用 path 依赖）"
   else
-    pass "未使用 git 依赖（符合本地开发要求）"
+    pass "未使用 git 依赖"
   fi
 
-  # 禁止维护私有协议常量
   if grep -rqE 'const\s+API_PREFIX|const\s+AGENT_REGISTER|const\s+AGENT_WS' src/ 2>/dev/null; then
-    fail "项目中存在私有 API 路径常量（必须复用 pandanetos::protocol::paths）"
+    fail "存在私有 API 路径常量（必须复用 pandanetos::protocol::paths）"
   else
     pass "未发现私有 API 路径常量"
   fi
 fi
 
 # =============================================================================
-# [2/9] 目录布局检查（强制）
+# [2/10] 目录布局检查（强制）
 # =============================================================================
-section "2/8" "目录布局检查"
+section "2/10" "目录布局检查"
 
 if [ -d "../PandaNetOS/crates/pandanetos" ]; then
-  pass "PandaNetOS 标准库仓库存在于同级目录"
+  pass "PandaNetOS 标准库存在于同级目录"
 else
-  fail "未找到 ../PandaNetOS/crates/pandanetos（标准库仓库必须与本项目同级）"
+  fail "未找到 ../PandaNetOS/crates/pandanetos"
 fi
 
-# Rust 项目检查 src/ 目录
 if [ "$IS_RUST_PROJECT" -eq 1 ]; then
   if [ -d "src" ]; then
     pass "src/ 目录存在"
@@ -105,94 +102,223 @@ if [ "$IS_RUST_PROJECT" -eq 1 ]; then
     fail "src/ 目录不存在"
   fi
 else
-  skip "非 Rust 项目，跳过 src/ 目录检查"
+  skip "非 Rust 项目，跳过 src/ 检查"
 fi
 
 # =============================================================================
-# [3/9] README 规范检查（所有项目强制）
+# [3/10] README 规范检查（强制，统一格式+统一顺序）
 # =============================================================================
-section "3/8" "README 规范检查"
+section "3/10" "README 规范检查（统一格式+统一顺序）"
 
 if [ ! -f "README.md" ]; then
   fail "README.md 不存在"
 else
-  # 必须包含标准库路径约定章节
+  README_ERRORS=0
+
+  # ---- 强制章节（FAIL）----
+  if grep -qE '^# ' README.md; then
+    pass "包含项目标题"
+  else
+    fail "缺少项目标题（必须以 # 开头）"
+    README_ERRORS=$((README_ERRORS + 1))
+  fi
+
+  if grep -qE '^## .*功能特性|^## .*Features|^## .*特性|^## .*功能' README.md; then
+    pass "包含「功能特性」章节"
+  else
+    fail "缺少「功能特性」章节"
+    README_ERRORS=$((README_ERRORS + 1))
+  fi
+
   if grep -q "标准库路径约定" README.md; then
-    pass "README 包含「标准库路径约定」章节"
+    pass "包含「标准库路径约定」章节"
   else
-    fail "README 缺少「标准库路径约定」章节（见 PandaNetOS docs/standards/project-structure.md）"
+    fail "缺少「标准库路径约定」章节"
+    README_ERRORS=$((README_ERRORS + 1))
   fi
 
-  # 必须引用 PandaNetOS 生态
   if grep -q "PandaNetOS" README.md; then
-    pass "README 引用了 PandaNetOS 生态"
+    pass "引用了 PandaNetOS 生态"
   else
-    fail "README 未引用 PandaNetOS 生态"
+    fail "未引用 PandaNetOS 生态"
+    README_ERRORS=$((README_ERRORS + 1))
   fi
 
-  # 必须写明 path 依赖写法
   if grep -q 'path = "../PandaNetOS/crates/pandanetos"' README.md; then
-    pass "README 写明了 path 依赖写法"
+    pass "写明了 path 依赖写法"
   else
-    fail "README 未写明 path 依赖写法"
+    fail "未写明 path 依赖写法"
+    README_ERRORS=$((README_ERRORS + 1))
   fi
 
-  # 必须包含快速开始
-  if grep -qE '^## .*快速开始|^## .*Quick Start|^## .*快速使用|^## .*使用方法' README.md; then
-    pass "README 包含「快速开始」章节"
+  if grep -qE '^## .*快速开始|^## .*Quick Start|^## .*快速使用|^## .*使用方法|^## .*Getting Started' README.md; then
+    pass "包含「快速开始」章节"
   else
-    warn "README 建议包含「快速开始」章节"
+    fail "缺少「快速开始」章节"
+    README_ERRORS=$((README_ERRORS + 1))
   fi
 
-  # 必须包含许可证
-  if grep -qiE '^## .*许可|^## .*License|MIT|Apache' README.md; then
-    pass "README 包含许可证信息"
+  if grep -qE '^## .*开发指南|^## .*Development|^## .*开发|^## .*贡献|^## .*Contributing' README.md; then
+    pass "包含「开发指南/贡献」章节"
   else
-    warn "README 建议包含许可证信息（统一 MIT）"
+    fail "缺少「开发指南/贡献」章节"
+    README_ERRORS=$((README_ERRORS + 1))
+  fi
+
+  if grep -qiE '^## .*许可|^## .*License|^## .*版权' README.md; then
+    pass "包含「许可证」章节"
+    if grep -qiE 'MIT' README.md; then
+      pass "许可证为 MIT（统一标准）"
+    else
+      warn "建议统一使用 MIT 许可证"
+    fi
+  else
+    fail "缺少「许可证」章节（统一 MIT）"
+    README_ERRORS=$((README_ERRORS + 1))
+  fi
+
+  # ---- 建议子章节（WARN）----
+  if grep -qE '^### .*环境要求|^### .*Requirements|^### .*前置条件|^### .*Prerequisites' README.md; then
+    pass "快速开始包含「环境要求」"
+  else
+    warn "快速开始建议包含「环境要求」子章节"
+  fi
+
+  if grep -qE '^### .*安装|^### .*Install|^### .*构建|^### .*Build' README.md; then
+    pass "快速开始包含「安装/构建」"
+  else
+    warn "快速开始建议包含「安装/构建」子章节"
+  fi
+
+  if grep -qE '^### .*使用示例|^### .*Usage|^### .*示例|^### .*Example' README.md; then
+    pass "快速开始包含「使用示例」"
+  else
+    warn "快速开始建议包含「使用示例」子章节"
+  fi
+
+  if grep -qE '^### .*构建|^### .*Build|cargo build|docker build' README.md; then
+    pass "开发指南包含「构建」说明"
+  else
+    warn "开发指南建议包含「构建」说明"
+  fi
+
+  if grep -qE '^### .*测试|^### .*Test|cargo test' README.md; then
+    pass "开发指南包含「测试」说明"
+  else
+    warn "开发指南建议包含「测试」说明"
+  fi
+
+  if grep -qE '合规检查|check_compliance|compliance' README.md; then
+    pass "开发指南包含「合规检查」说明"
+  else
+    warn "开发指南建议包含「合规检查」说明"
+  fi
+
+  # ---- 建议章节（WARN）----
+  if grep -qE '^## .*配置|^## .*Config|^## .*参数' README.md; then
+    pass "包含「配置说明」章节"
+  else
+    warn "建议包含「配置说明」章节"
+  fi
+
+  if grep -qE '^## .*项目结构|^## .*Structure|^## .*目录结构' README.md; then
+    pass "包含「项目结构」章节"
+  else
+    warn "建议包含「项目结构」章节"
+  fi
+
+  if grep -qE '^## .*变更日志|^## .*Changelog|^## .*更新日志|CHANGELOG' README.md; then
+    pass "包含「变更日志」章节"
+  else
+    warn "建议包含「变更日志」章节或链接到 CHANGELOG.md"
+  fi
+
+  if grep -qE '\[!\[.*\]\(.*\)\]|img.shields.io' README.md; then
+    pass "包含徽章"
+  else
+    warn "建议包含许可证/构建状态等徽章"
+  fi
+
+  if grep -qE '^> |^[^#].{10,}' README.md; then
+    pass "包含项目简介"
+  else
+    warn "建议包含一句话项目简介"
+  fi
+
+  # ---- README 章节顺序强制检查（FAIL）----
+  SECTIONS=$(grep -nE '^## ' README.md 2>/dev/null || true)
+  if [ -n "$SECTIONS" ]; then
+    STANDARD_ORDER=("功能特性" "标准库路径约定" "快速开始" "配置说明" "项目结构" "开发指南" "贡献指南" "变更日志" "许可证")
+    PREV_LINE=0
+    PREV_NAME=""
+    ORDER_ERROR=0
+    
+    for STD_NAME in "${STANDARD_ORDER[@]}"; do
+      LINE_NUM=$(echo "$SECTIONS" | grep -E "## .*${STD_NAME}" | head -1 | cut -d: -f1)
+      if [ -n "$LINE_NUM" ]; then
+        if [ "$LINE_NUM" -lt "$PREV_LINE" ]; then
+          fail "README 章节顺序错误：「${STD_NAME}」在「${PREV_NAME}」之前"
+          ORDER_ERROR=$((ORDER_ERROR + 1))
+        else
+          PREV_LINE=$LINE_NUM
+          PREV_NAME=$STD_NAME
+        fi
+      fi
+    done
+    
+    if [ "$ORDER_ERROR" -eq 0 ]; then
+      pass "README 章节顺序符合标准"
+    fi
+  else
+    warn "未检测到 ## 章节，无法校验顺序"
+  fi
+
+  if [ "$README_ERRORS" -eq 0 ]; then
+    pass "README 所有强制检查项通过"
   fi
 fi
 
 # =============================================================================
-# [4/9] 代码格式检查（Rust 项目强制）
+# [4/10] 代码格式检查（Rust 项目强制）
 # =============================================================================
-section "4/8" "代码格式检查"
+section "4/10" "代码格式检查"
 
 if [ "$IS_RUST_PROJECT" -eq 0 ]; then
-  skip "非 Rust 项目，跳过 fmt 检查"
+  skip "非 Rust 项目，跳过"
 elif command -v cargo &>/dev/null; then
   if cargo fmt --all -- --check 2>&1; then
     pass "cargo fmt 检查通过"
   else
-    fail "cargo fmt 检查未通过（执行: cargo fmt --all）"
+    fail "cargo fmt 检查未通过"
   fi
 else
-  warn "cargo 未安装，跳过 fmt 检查"
+  warn "cargo 未安装，跳过"
 fi
 
 # =============================================================================
-# [5/9] Clippy 检查（Rust 项目强制）
+# [5/10] Clippy 检查（Rust 项目强制）
 # =============================================================================
-section "5/8" "Clippy 检查"
+section "5/10" "Clippy 检查"
 
 if [ "$IS_RUST_PROJECT" -eq 0 ]; then
-  skip "非 Rust 项目，跳过 clippy 检查"
+  skip "非 Rust 项目，跳过"
 elif command -v cargo &>/dev/null; then
   if cargo clippy --all-targets -- -D warnings 2>&1 | tail -5; then
-    pass "cargo clippy 检查通过（警告视为错误）"
+    pass "cargo clippy 检查通过"
   else
-    fail "cargo clippy 检查未通过（存在 warning，CI 中 -D warnings 视为错误）"
+    fail "cargo clippy 检查未通过"
   fi
 else
-  warn "cargo 未安装，跳过 clippy 检查"
+  warn "cargo 未安装，跳过"
 fi
 
 # =============================================================================
-# [6/9] 单元测试（Rust 项目强制）
+# [6/10] 单元测试（Rust 项目强制）
 # =============================================================================
-section "6/8" "单元测试"
+section "6/10" "单元测试"
 
 if [ "$IS_RUST_PROJECT" -eq 0 ]; then
-  skip "非 Rust 项目，跳过单元测试"
+  skip "非 Rust 项目，跳过"
 elif command -v cargo &>/dev/null; then
   if cargo test 2>&1 | tail -10; then
     pass "cargo test 全部通过"
@@ -200,27 +326,25 @@ elif command -v cargo &>/dev/null; then
     fail "cargo test 存在失败"
   fi
 else
-  warn "cargo 未安装，跳过测试"
+  warn "cargo 未安装，跳过"
 fi
 
 # =============================================================================
-# [7/9] 敏感信息检查（所有项目强制）
+# [7/10] 敏感信息检查（强制）
 # =============================================================================
-section "7/8" "敏感信息检查"
+section "7/10" "敏感信息检查"
 
 SENSITIVE_FOUND=0
 
-# 检查硬编码 token / password / api_key
 if grep -rn --include="*.rs" --include="*.yaml" --include="*.yml" --include="*.toml" --include="*.sh" \
   -E '(token|password|api_key|secret)\s*=\s*"[a-zA-Z0-9_\-]{8,}"' \
   src/ Cargo.toml *.yaml *.yml *.sh 2>/dev/null | \
   grep -vE '""|null|placeholder|example|your_|<.*>|panda-allow' | \
   grep -v 'target/'; then
-  fail "发现硬编码敏感信息（token/password/api_key/secret）"
+  fail "发现硬编码敏感信息"
   SENSITIVE_FOUND=1
 fi
 
-# 检查私钥
 if grep -rn --include="*.rs" --include="*.pem" --include="*.key" \
   -E 'BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY' \
   . 2>/dev/null | grep -v 'target/'; then
@@ -233,170 +357,95 @@ if [ "$SENSITIVE_FOUND" -eq 0 ]; then
 fi
 
 # =============================================================================
-# [8/9] 代码规范检查（Rust 项目强制）
+# [8/10] 代码规范检查（Rust 项目强制）
 # =============================================================================
-section "8/8" "代码规范检查"
+section "8/10" "代码规范检查"
 
 if [ "$IS_RUST_PROJECT" -eq 0 ]; then
-  skip "非 Rust 项目，跳过代码规范检查"
+  skip "非 Rust 项目，跳过"
 else
-  # 禁止 println!/dbg!/todo! 在 src 中（支持白名单注释 // panda-allow: cli-output）
   FORBIDDEN_FOUND=0
   FORBIDDEN_LINES=$(grep -rn --include="*.rs" -E '\b(println!|dbg!|todo!|unimplemented!)\(' src/ 2>/dev/null | \
     grep -v 'panda-allow:' || true)
   if [ -n "$FORBIDDEN_LINES" ]; then
     echo "$FORBIDDEN_LINES"
-    fail "src/ 中存在 println!/dbg!/todo!/unimplemented!（使用 tracing 替代日志；CLI 输出可加 // panda-allow: cli-output）"
+    fail "src/ 中存在 println!/dbg!/todo!/unimplemented!"
     FORBIDDEN_FOUND=1
   fi
 
-  # 禁止 unwrap() 无安全注释
   UNWRAP_COUNT=$(grep -rn --include="*.rs" -E '\.unwrap\(\)' src/ 2>/dev/null | \
     grep -vc 'SAFETY\|安全\|//.*unwrap\|panda-allow' || true)
   if [ "$UNWRAP_COUNT" -gt 0 ]; then
-    warn "src/ 中存在 $UNWRAP_COUNT 处 unwrap()（建议用 ? 或 expect 并说明安全理由）"
+    warn "src/ 中存在 $UNWRAP_COUNT 处 unwrap()（建议用 ? 或 expect）"
   else
     pass "未发现无注释的 unwrap()"
   fi
 
   if [ "$FORBIDDEN_FOUND" -eq 0 ]; then
-    pass "未发现禁用宏（println!/dbg!/todo!）"
+    pass "未发现禁用宏"
   fi
 fi
 
 # =============================================================================
-# [9/9] Tag Guard 工作流检查（所有项目强制）
-# =============================================================================
-section "9/9" "Tag Guard 工作流检查"
-
-TAG_GUARD_FILE=".github/workflows/tag-guard.yml"
-if [ ! -f "$TAG_GUARD_FILE" ]; then
-  fail "缺少 Tag Guard 工作流文件：$TAG_GUARD_FILE（所有发版仓库必须配置 Tag Guard）"
-else
-  pass "Tag Guard 工作流文件存在：$TAG_GUARD_FILE"
-  
-  # 检查是否引用了 PandaNetOS 标准库的 Tag Guard composite action
-  if grep -qE 'PandaNetOS/PandaNetOS/actions/tag-guard@' "$TAG_GUARD_FILE"; then
-    pass "Tag Guard 引用了 PandaNetOS 标准库 composite action"
-  else
-    fail "Tag Guard 未引用 PandaNetOS 标准库 composite action（必须使用: uses: PandaNetOS/PandaNetOS/actions/tag-guard@main）"
-  fi
-  
-  # 检查是否配置了 delete-on-failure: true
-  if grep -qE 'delete-on-failure:\s*true' "$TAG_GUARD_FILE"; then
-    pass "Tag Guard 已启用校验失败自动删除 tag（delete-on-failure: true）"
-  else
-    warn "Tag Guard 建议启用 delete-on-failure: true（校验失败时自动删除错误 tag）"
-  fi
-  
-  # 检查是否配置了 check-ci-status: true
-  if grep -qE 'check-ci-status:\s*true' "$TAG_GUARD_FILE"; then
-    pass "Tag Guard 已启用 CI 状态校验（check-ci-status: true）"
-  else
-    warn "Tag Guard 建议启用 check-ci-status: true（发版前校验 CI 状态）"
-  fi
-fi
-
-# =============================================================================
-# [9/9] Tag Guard 工作流检查（所有发版项目强制）
-# =============================================================================
-section "9/9" "Tag Guard 工作流检查"
-
-if [ ! -f ".github/workflows/tag-guard.yml" ]; then
-  fail "缺少 Tag Guard 工作流（必须存在 .github/workflows/tag-guard.yml）"
-else
-  pass "Tag Guard 工作流存在"
-
-  # 必须引用 PandaNetOS 标准库的 Tag Guard action
-  if grep -q 'PandaNetOS/PandaNetOS/actions/tag-guard@' .github/workflows/tag-guard.yml; then
-    pass "Tag Guard 引用了 PandaNetOS 标准库 action"
-  else
-    fail "Tag Guard 未引用 PandaNetOS 标准库 action（必须使用 PandaNetOS/PandaNetOS/actions/tag-guard@main）"
-  fi
-
-  # 必须启用 delete-on-failure
-  if grep -q 'delete-on-failure:.*true' .github/workflows/tag-guard.yml; then
-    pass "Tag Guard 启用了 delete-on-failure"
-  else
-    fail "Tag Guard 未启用 delete-on-failure（校验失败时必须自动删除 tag）"
-  fi
-
-  # 必须启用 check-ci-status
-  if grep -q 'check-ci-status:.*true' .github/workflows/tag-guard.yml; then
-    pass "Tag Guard 启用了 check-ci-status"
-  else
-    fail "Tag Guard 未启用 check-ci-status（必须校验 CI 状态）"
-  fi
-fi
-
-# =============================================================================
-# [9/10] Tag Guard 工作流检查（所有发版项目强制）
+# [9/10] Tag Guard 工作流检查（强制）
 # =============================================================================
 section "9/10" "Tag Guard 工作流检查"
 
 TAG_GUARD_FILE=".github/workflows/tag-guard.yml"
 if [ ! -f "$TAG_GUARD_FILE" ]; then
-  fail "缺少 Tag Guard 工作流文件: $TAG_GUARD_FILE"
-  fail "必须添加 Tag Guard 工作流，参考 PandaNetOS/actions/tag-guard"
+  fail "缺少 Tag Guard 工作流: $TAG_GUARD_FILE"
+  fail "必须添加 Tag Guard，参考 PandaNetOS/actions/tag-guard"
 else
   pass "Tag Guard 工作流文件存在"
 
-  # 必须引用 PandaNetOS 标准库的 Tag Guard action
   if grep -q 'PandaNetOS/PandaNetOS/actions/tag-guard@' "$TAG_GUARD_FILE"; then
     pass "引用了 PandaNetOS 标准库的 Tag Guard action"
   else
     fail "必须引用 PandaNetOS/PandaNetOS/actions/tag-guard@main"
   fi
 
-  # 必须启用 delete-on-failure
   if grep -q 'delete-on-failure:.*true' "$TAG_GUARD_FILE"; then
-    pass "已启用 delete-on-failure（校验失败自动删除 tag）"
+    pass "已启用 delete-on-failure"
   else
     fail "必须启用 delete-on-failure: true"
   fi
 
-  # 必须启用 check-ci-status
   if grep -q 'check-ci-status:.*true' "$TAG_GUARD_FILE"; then
-    pass "已启用 check-ci-status（校验 CI 状态）"
+    pass "已启用 check-ci-status"
   else
     fail "必须启用 check-ci-status: true"
   fi
 
-  # 必须配置 github-token
   if grep -q 'github-token:' "$TAG_GUARD_FILE"; then
     pass "已配置 github-token"
   else
-    fail "必须配置 github-token: \${{ secrets.GITHUB_TOKEN }}"
+    fail "必须配置 github-token"
   fi
 fi
 
 # =============================================================================
-# [10/10] CI/CD 工作流完整性检查（所有项目强制）
+# [10/10] CI/CD 工作流完整性检查（强制）
 # =============================================================================
 section "10/10" "CI/CD 工作流完整性检查"
 
-# 必须有 cargo test 工作流
 if [ -f ".github/workflows/cargo-test.yml" ] || grep -rq 'cargo test' .github/workflows/ 2>/dev/null; then
   pass "存在 Cargo Test 工作流"
 else
   warn "建议添加 Cargo Test 工作流"
 fi
 
-# 必须有 cargo fmt 工作流
 if [ -f ".github/workflows/cargo-format.yml" ] || grep -rq 'cargo fmt' .github/workflows/ 2>/dev/null; then
   pass "存在 Cargo Format 工作流"
 else
   warn "建议添加 Cargo Format 工作流"
 fi
 
-# 必须有 cargo clippy 工作流
 if [ -f ".github/workflows/cargo-clippy.yml" ] || grep -rq 'cargo clippy' .github/workflows/ 2>/dev/null; then
   pass "存在 Cargo Clippy 工作流"
 else
   warn "建议添加 Cargo Clippy 工作流"
 fi
 
-# 必须有 compliance 工作流
 if [ -f ".github/workflows/compliance.yml" ] || grep -rq 'check_compliance' .github/workflows/ 2>/dev/null; then
   pass "存在 Compliance 工作流"
 else
