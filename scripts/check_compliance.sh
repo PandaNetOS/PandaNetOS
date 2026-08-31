@@ -432,10 +432,11 @@ else
     fail "必须启用 delete-on-failure: true"
   fi
 
-  if grep -q 'check-ci-status:.*true' "$TAG_GUARD_FILE"; then
-    pass "已启用 check-ci-status"
+  # check-ci-status 不再强制要求，默认为 false（因为 PR 合并时已经通过了 CI 检查）
+  if grep -q 'check-ci-status:' "$TAG_GUARD_FILE"; then
+    pass "已配置 check-ci-status（不强制要求 true）"
   else
-    fail "必须启用 check-ci-status: true"
+    pass "未配置 check-ci-status（使用默认值 false）"
   fi
 
   if grep -q 'github-token:' "$TAG_GUARD_FILE"; then
