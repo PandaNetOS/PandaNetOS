@@ -298,6 +298,112 @@ else
 fi
 
 # =============================================================================
+# [9/9] Tag Guard 工作流检查（所有发版项目强制）
+# =============================================================================
+section "9/9" "Tag Guard 工作流检查"
+
+if [ ! -f ".github/workflows/tag-guard.yml" ]; then
+  fail "缺少 Tag Guard 工作流（必须存在 .github/workflows/tag-guard.yml）"
+else
+  pass "Tag Guard 工作流存在"
+
+  # 必须引用 PandaNetOS 标准库的 Tag Guard action
+  if grep -q 'PandaNetOS/PandaNetOS/actions/tag-guard@' .github/workflows/tag-guard.yml; then
+    pass "Tag Guard 引用了 PandaNetOS 标准库 action"
+  else
+    fail "Tag Guard 未引用 PandaNetOS 标准库 action（必须使用 PandaNetOS/PandaNetOS/actions/tag-guard@main）"
+  fi
+
+  # 必须启用 delete-on-failure
+  if grep -q 'delete-on-failure:.*true' .github/workflows/tag-guard.yml; then
+    pass "Tag Guard 启用了 delete-on-failure"
+  else
+    fail "Tag Guard 未启用 delete-on-failure（校验失败时必须自动删除 tag）"
+  fi
+
+  # 必须启用 check-ci-status
+  if grep -q 'check-ci-status:.*true' .github/workflows/tag-guard.yml; then
+    pass "Tag Guard 启用了 check-ci-status"
+  else
+    fail "Tag Guard 未启用 check-ci-status（必须校验 CI 状态）"
+  fi
+fi
+
+# =============================================================================
+# [9/10] Tag Guard 工作流检查（所有发版项目强制）
+# =============================================================================
+section "9/10" "Tag Guard 工作流检查"
+
+TAG_GUARD_FILE=".github/workflows/tag-guard.yml"
+if [ ! -f "$TAG_GUARD_FILE" ]; then
+  fail "缺少 Tag Guard 工作流文件: $TAG_GUARD_FILE"
+  fail "必须添加 Tag Guard 工作流，参考 PandaNetOS/actions/tag-guard"
+else
+  pass "Tag Guard 工作流文件存在"
+
+  # 必须引用 PandaNetOS 标准库的 Tag Guard action
+  if grep -q 'PandaNetOS/PandaNetOS/actions/tag-guard@' "$TAG_GUARD_FILE"; then
+    pass "引用了 PandaNetOS 标准库的 Tag Guard action"
+  else
+    fail "必须引用 PandaNetOS/PandaNetOS/actions/tag-guard@main"
+  fi
+
+  # 必须启用 delete-on-failure
+  if grep -q 'delete-on-failure:.*true' "$TAG_GUARD_FILE"; then
+    pass "已启用 delete-on-failure（校验失败自动删除 tag）"
+  else
+    fail "必须启用 delete-on-failure: true"
+  fi
+
+  # 必须启用 check-ci-status
+  if grep -q 'check-ci-status:.*true' "$TAG_GUARD_FILE"; then
+    pass "已启用 check-ci-status（校验 CI 状态）"
+  else
+    fail "必须启用 check-ci-status: true"
+  fi
+
+  # 必须配置 github-token
+  if grep -q 'github-token:' "$TAG_GUARD_FILE"; then
+    pass "已配置 github-token"
+  else
+    fail "必须配置 github-token: \${{ secrets.GITHUB_TOKEN }}"
+  fi
+fi
+
+# =============================================================================
+# [10/10] CI/CD 工作流完整性检查（所有项目强制）
+# =============================================================================
+section "10/10" "CI/CD 工作流完整性检查"
+
+# 必须有 cargo test 工作流
+if [ -f ".github/workflows/cargo-test.yml" ] || grep -rq 'cargo test' .github/workflows/ 2>/dev/null; then
+  pass "存在 Cargo Test 工作流"
+else
+  warn "建议添加 Cargo Test 工作流"
+fi
+
+# 必须有 cargo fmt 工作流
+if [ -f ".github/workflows/cargo-format.yml" ] || grep -rq 'cargo fmt' .github/workflows/ 2>/dev/null; then
+  pass "存在 Cargo Format 工作流"
+else
+  warn "建议添加 Cargo Format 工作流"
+fi
+
+# 必须有 cargo clippy 工作流
+if [ -f ".github/workflows/cargo-clippy.yml" ] || grep -rq 'cargo clippy' .github/workflows/ 2>/dev/null; then
+  pass "存在 Cargo Clippy 工作流"
+else
+  warn "建议添加 Cargo Clippy 工作流"
+fi
+
+# 必须有 compliance 工作流
+if [ -f ".github/workflows/compliance.yml" ] || grep -rq 'check_compliance' .github/workflows/ 2>/dev/null; then
+  pass "存在 Compliance 工作流"
+else
+  fail "必须添加 Compliance 工作流（调用 PandaNetOS/scripts/check_compliance.sh）"
+fi
+
+# =============================================================================
 # 汇总
 # =============================================================================
 echo ""
