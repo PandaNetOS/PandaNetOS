@@ -22,6 +22,9 @@ inputs:
   github-token:
     description: 'GitHub Token（用于删除 tag 和查询 CI 状态）'
     required: true
+  dispatch-token:
+    description: '用于触发 Release workflow 的 Token（必须是 PAT，因为 GITHUB_TOKEN 无法触发 workflow_dispatch）'
+    required: true
   trigger-release:
     description: '校验通过后是否触发 Release workflow'
     required: false
@@ -201,7 +204,7 @@ runs:
       if: steps.validation-pass.conclusion == 'success' && inputs.trigger-release == 'true'
       shell: bash
       env:
-        GH_TOKEN: ${{ inputs.github-token }}
+        GH_TOKEN: ${{ inputs.dispatch-token }}
       run: |
         REPO="${{ github.repository }}"
         WORKFLOW="${{ inputs.release-workflow }}"
