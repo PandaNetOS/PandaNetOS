@@ -136,7 +136,7 @@ jobs:
           # 生成组合标签
           if [ -n "${{ inputs.combo_tag_format }}" ]; then
             COMBO_TAG="${{ inputs.combo_tag_format }}"
-            while IFS='=' read -r key value; do
+            while IFS='=' read -r key value || [ -n "$key" ]; do
               COMBO_TAG=$(echo "$COMBO_TAG" | sed "s/{$key}/$value/g")
             done <<< "$VERSIONS"
             echo "combo_tag=$COMBO_TAG" >> $GITHUB_OUTPUT
@@ -144,8 +144,8 @@ jobs:
           fi
           
           # 生成构建参数
-          while IFS='=' read -r key value; do
-            BUILD_ARGS_JSON=$(echo "$BUILD_ARGS_JSON" | jq --arg k "${key^^}_VERSION" --arg v "$value" '. + {($k): $v}')
+          while IFS='=' read -r key value || [ -n "$key" ]; do
+            BUILD_ARGS_JSON=$(echo "$BUILD_ARGS_JSON" | jq -c --arg k "${key^^}_VERSION" --arg v "$value" '. + {($k): $v}')
           done <<< "$VERSIONS"
           echo "build_args=$BUILD_ARGS_JSON" >> $GITHUB_OUTPUT
 
