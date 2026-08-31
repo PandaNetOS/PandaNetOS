@@ -112,35 +112,35 @@ jobs:
           
           # 用 python + curl 调用 GitHub API 获取版本（public 仓库不需要认证）
           VERSIONS=$(python3 << 'PYEOF'
-          import json, sys, subprocess, os
-          
-          repos_json = os.environ.get('REPOS_JSON', '[]')
-          repos = json.loads(repos_json)
-          
-          for repo in repos:
-              try:
-                  # 使用 curl 调用 GitHub API（public 仓库不需要认证）
-                  cmd = ['curl', '-s', '-L', '--fail',
-                         '-H', 'Accept: application/vnd.github.v3+json',
-                         f'https://api.github.com/repos/{repo}/releases/latest']
-                  result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-                  data = json.loads(result.stdout)
-                  tag_name = data.get('tag_name', '')
-                  ver = tag_name.lstrip('v')
-                  if not ver:
-                      print(f'ERROR: {repo} 版本号无效: {tag_name}', file=sys.stderr)
-                      sys.exit(1)
-                  repo_name = repo.split('/')[-1]
-                  print(f'{repo_name}={ver}')
-                  print(f'获取到 {repo_name} 版本: {ver}', file=sys.stderr)
-              except subprocess.CalledProcessError as e:
-                  print(f'ERROR: API 请求失败 {repo}: {e}', file=sys.stderr)
-                  print(f'stderr: {e.stderr}', file=sys.stderr)
-                  sys.exit(1)
-              except Exception as e:
-                  print(f'ERROR: Failed to get version for {repo}: {e}', file=sys.stderr)
-                  sys.exit(1)
-          PYEOF
+import json, sys, subprocess, os
+
+repos_json = os.environ.get('REPOS_JSON', '[]')
+repos = json.loads(repos_json)
+
+for repo in repos:
+    try:
+        # 使用 curl 调用 GitHub API（public 仓库不需要认证）
+        cmd = ['curl', '-s', '-L', '--fail',
+               '-H', 'Accept: application/vnd.github.v3+json',
+               f'https://api.github.com/repos/{repo}/releases/latest']
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        data = json.loads(result.stdout)
+        tag_name = data.get('tag_name', '')
+        ver = tag_name.lstrip('v')
+        if not ver:
+            print(f'ERROR: {repo} 版本号无效: {tag_name}', file=sys.stderr)
+            sys.exit(1)
+        repo_name = repo.split('/')[-1]
+        print(f'{repo_name}={ver}')
+        print(f'获取到 {repo_name} 版本: {ver}', file=sys.stderr)
+    except subprocess.CalledProcessError as e:
+        print(f'ERROR: API 请求失败 {repo}: {e}', file=sys.stderr)
+        print(f'stderr: {e.stderr}', file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f'ERROR: Failed to get version for {repo}: {e}', file=sys.stderr)
+        sys.exit(1)
+PYEOF
           )
           
           echo "获取到的版本:"
