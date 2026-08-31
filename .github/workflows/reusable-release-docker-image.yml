@@ -78,6 +78,9 @@ on:
         type: boolean
         default: false
     secrets:
+      DOCKERHUB_USERNAME:
+        description: "Docker Hub 用户名"
+        required: false
       DOCKERHUB_TOKEN:
         description: "Docker Hub 访问令牌"
         required: false
