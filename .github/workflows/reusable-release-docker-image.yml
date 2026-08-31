@@ -84,6 +84,12 @@ on:
       DOCKERHUB_TOKEN:
         description: "Docker Hub 访问令牌"
         required: false
+      ALIYUN_ACR_REGISTRY:
+        description: "阿里云 ACR registry 地址"
+        required: false
+      ALIYUN_ACR_NAMESPACE:
+        description: "阿里云 ACR 命名空间"
+        required: false
       ALIYUN_ACR_USERNAME:
         description: "阿里云 ACR 用户名"
         required: false
