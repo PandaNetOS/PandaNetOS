@@ -14,7 +14,7 @@ inputs:
   check-ci-status:
     description: '是否校验 tag 指向 commit 的 CI 状态'
     required: false
-    default: 'true'
+    default: 'false'
   required-checks:
     description: '必须通过的检查名称（逗号分隔），为空则检查所有 completed 的 check'
     required: false
@@ -132,14 +132,16 @@ runs:
         if [ -n "$REQUIRED" ]; then
           echo "📋 校验指定的 required checks: $REQUIRED"
           FAILED=""
-          for CHECK_NAME in $(echo "$REQUIRED" | tr ',' ' '); do
+          while IFS=',' read -r CHECK_NAME || [ -n "$CHECK_NAME" ]; do
+            CHECK_NAME=$(echo "$CHECK_NAME" | xargs)  # 去除首尾空格
+            [ -z "$CHECK_NAME" ] && continue
             CONCLUSION=$(echo "$CHECKS_JSON" | python3 -c "import json,sys; data=json.load(sys.stdin); name='$CHECK_NAME'; print(next((r.get('conclusion','pending') for r in data.get('check_runs',[]) if r['name']==name), 'not_found'))" 2>/dev/null)
             if [ "$CONCLUSION" != "success" ]; then
               FAILED="$FAILED\n  ❌ $CHECK_NAME: $CONCLUSION"
             else
               echo "  ✅ $CHECK_NAME: success"
             fi
-          done
+          done <<< "$REQUIRED"
         else
           echo "📋 校验所有 check-runs..."
           FAILED=$(echo "$CHECKS_JSON" | python3 -c "import json,sys; data=json.load(sys.stdin); failed=[]; [print(f'  ✅ {r["name"]}: success') if r.get('status')=='completed' and r.get('conclusion')=='success' else failed.append(f'  ❌ {r["name"]}: {r.get("conclusion","pending")}' if r.get('status')=='completed' else f'  ⏳ {r["name"]}: {r.get("status")} (未完成)') for r in data.get('check_runs',[])]; print('\n'.join(failed))" 2>/dev/null)
