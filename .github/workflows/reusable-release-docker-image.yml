@@ -111,7 +111,7 @@ jobs:
           echo "上游仓库: $REPOS_JSON"
           
           # 用 curl + jq 调用 GitHub API 获取版本（public 仓库不需要认证）
-          VERSIONS=""
+          VERSIONS_FILE=$(mktemp)
           for repo in $(echo "$REPOS_JSON" | jq -r '.[]'); do
             echo "获取 $repo 版本..."
             ver=$(curl -s -L --fail               -H "Accept: application/vnd.github.v3+json"               "https://api.github.com/repos/$repo/releases/latest" | jq -r '.tag_name | ltrimstr("v")')
@@ -120,12 +120,11 @@ jobs:
               exit 1
             fi
             repo_name=$(echo "$repo" | cut -d'/' -f2)
-            VERSIONS="${VERSIONS}${repo_name}=${ver}"$'\n'
+            echo "${repo_name}=${ver}" >> "$VERSIONS_FILE"
             echo "获取到 $repo_name 版本: $ver"
           done
           
-          # 去掉最后一个换行
-          VERSIONS=$(echo -e "$VERSIONS" | grep -v '^$')
+          VERSIONS=$(cat "$VERSIONS_FILE")
           
           echo "获取到的版本:"
           echo "$VERSIONS"
@@ -138,16 +137,17 @@ jobs:
             COMBO_TAG="${{ inputs.combo_tag_format }}"
             while IFS='=' read -r key value || [ -n "$key" ]; do
               COMBO_TAG=$(echo "$COMBO_TAG" | sed "s/{$key}/$value/g")
-            done <<< "$VERSIONS"
+            done < "$VERSIONS_FILE"
             echo "combo_tag=$COMBO_TAG" >> $GITHUB_OUTPUT
             echo "Combo tag: $COMBO_TAG"
           fi
           
           # 生成构建参数
           while IFS='=' read -r key value || [ -n "$key" ]; do
-            BUILD_ARGS_JSON=$(echo "$BUILD_ARGS_JSON" | jq -c --arg k "${key^^}_VERSION" --arg v "$value" '. + {($k): $v}')
-          done <<< "$VERSIONS"
+            BUILD_ARGS_JSON=$(echo "$BUILD_ARGS_JSON" | jq -c --arg k "${key^^}_VERSION" --arg v "$value" '. + {($k): $v}' | tr -d '\n')
+          done < "$VERSIONS_FILE"
           echo "build_args=$BUILD_ARGS_JSON" >> $GITHUB_OUTPUT
+          rm -f "$VERSIONS_FILE"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
