@@ -125,17 +125,7 @@ runs:
           echo "📋 校验指定的 required checks: $REQUIRED"
           FAILED=""
           for CHECK_NAME in $(echo "$REQUIRED" | tr ',' ' '); do
-            CONCLUSION=$(echo "$CHECKS_JSON" | python3 -c "
-import json,sys
-data = json.load(sys.stdin)
-name = '$CHECK_NAME'
-for run in data.get('check_runs', []):
-    if run['name'] == name:
-        print(run.get('conclusion', 'pending'))
-        break
-else:
-    print('not_found')
-" 2>/dev/null)
+            CONCLUSION=$(echo "$CHECKS_JSON" | python3 -c "import json,sys; data=json.load(sys.stdin); name='$CHECK_NAME'; print(next((r.get('conclusion','pending') for r in data.get('check_runs',[]) if r['name']==name), 'not_found'))" 2>/dev/null)
             if [ "$CONCLUSION" != "success" ]; then
               FAILED="$FAILED\n  ❌ $CHECK_NAME: $CONCLUSION"
             else
@@ -144,22 +134,7 @@ else:
           done
         else
           echo "📋 校验所有 check-runs..."
-          FAILED=$(echo "$CHECKS_JSON" | python3 -c "
-import json,sys
-data = json.load(sys.stdin)
-failed = []
-for run in data.get('check_runs', []):
-    name = run['name']
-    status = run.get('status', 'unknown')
-    conclusion = run.get('conclusion', 'pending')
-    if status == 'completed' and conclusion != 'success':
-        failed.append(f'  ❌ {name}: {conclusion}')
-    elif status != 'completed':
-        failed.append(f'  ⏳ {name}: {status} (未完成)')
-    else:
-        print(f'  ✅ {name}: success')
-print('\n'.join(failed))
-" 2>/dev/null)
+          FAILED=$(echo "$CHECKS_JSON" | python3 -c "import json,sys; data=json.load(sys.stdin); failed=[]; [print(f'  ✅ {r["name"]}: success') if r.get('status')=='completed' and r.get('conclusion')=='success' else failed.append(f'  ❌ {r["name"]}: {r.get("conclusion","pending")}' if r.get('status')=='completed' else f'  ⏳ {r["name"]}: {r.get("status")} (未完成)') for r in data.get('check_runs',[])]; print('\n'.join(failed))" 2>/dev/null)
         fi
         
         if [ -n "$FAILED" ]; then
