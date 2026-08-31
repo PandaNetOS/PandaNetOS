@@ -136,7 +136,7 @@ jobs:
           BUILD_ARGS_JSON='{}'
           while IFS='=' read -r key value || [ -n "$key" ]; do
             [ -z "$key" ] && continue
-            BUILD_ARGS_JSON=$(echo "$BUILD_ARGS_JSON" | jq --arg k "${key^^}_VERSION" --arg v "$value" '. + {($k): $v}')
+            BUILD_ARGS_JSON=$(echo "$BUILD_ARGS_JSON" | jq -c --arg k "${key^^}_VERSION" --arg v "$value" '. + {($k): $v}')
           done < $GITHUB_OUTPUT
           echo "build_args=$BUILD_ARGS_JSON" >> $GITHUB_OUTPUT
           echo "Build args: $BUILD_ARGS_JSON"
