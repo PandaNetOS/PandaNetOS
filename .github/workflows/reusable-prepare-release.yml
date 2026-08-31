@@ -1,0 +1,63 @@
+name: Reusable Prepare Release
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "新版本号（如 1.2.5）"
+        required: true
+        type: string
+      binary_name:
+        description: "二进制名称（如 spde、pk）"
+        required: true
+        type: string
+    secrets:
+      PAT_FOR_RELEASE:
+        description: "用于提交版本号和打 tag 的 PAT"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_FOR_RELEASE }}
+
+      - name: 验证版本号格式
+        run: |
+          VERSION="${{ inputs.version }}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ 版本号格式错误: $VERSION（应为 x.y.z）"
+            exit 1
+          fi
+          echo "✅ 版本号格式正确: $VERSION"
+
+      - name: 更新 Cargo.toml 版本号
+        run: |
+          VERSION="${{ inputs.version }}"
+          echo "当前版本号:"
+          grep "^version" Cargo.toml
+          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
+          echo "更新后版本号:"
+          grep "^version" Cargo.toml
+
+      - name: 提交版本号更新
+        run: |
+          VERSION="${{ inputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml
+          git commit -m "chore: 发布版本 v$VERSION"
+          git push origin main
+
+      - name: 打 tag
+        run: |
+          VERSION="${{ inputs.version }}"
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
+          echo "✅ 已打 tag v$VERSION，将自动触发构建"
