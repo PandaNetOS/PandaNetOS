@@ -22,6 +22,10 @@ inputs:
   github-token:
     description: 'GitHub Token（用于删除 tag 和查询 CI 状态）'
     required: true
+  dispatch-token:
+    description: '用于触发 Release workflow 的 Token（需要 PAT，因为 GITHUB_TOKEN 无法触发 workflow_dispatch）'
+    required: false
+    default: ''
 
 runs:
   using: 'composite'
