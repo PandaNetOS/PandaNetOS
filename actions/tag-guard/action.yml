@@ -76,9 +76,9 @@ runs:
         CARGO_FILE="${{ inputs.cargo-toml-path }}"
         
         if [ ! -f "$CARGO_FILE" ]; then
-          echo "❌ 找不到 Cargo.toml: $CARGO_FILE"
-          echo "valid=false" >> $GITHUB_OUTPUT
-          echo "reason=cargo_file_not_found" >> $GITHUB_OUTPUT
+          echo "⚠️  找不到版本号文件: $CARGO_FILE（非 Rust 项目，跳过版本号一致性检查）"
+          echo "valid=true" >> $GITHUB_OUTPUT
+          echo "reason=skip_version_check" >> $GITHUB_OUTPUT
           exit 0
         fi
         
