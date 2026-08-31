@@ -36,6 +36,11 @@ on:
         required: false
         type: string
         default: "upstream-release"
+      version:
+        description: "版本号（如 1.1.7），由 Tag Guard 通过 workflow_dispatch 传递"
+        required: false
+        type: string
+        default: ""
     secrets:
       PAT_FOR_DOWNSTREAM:
         description: "通知下游项目的 PAT"
@@ -119,7 +124,7 @@ jobs:
         id: package
         shell: bash
         run: |
-          VERSION="${{ github.ref_name }}"
+          VERSION="${{ inputs.version || github.ref_name }}"
           bin="target/${{ matrix.target }}/release/${{ inputs.binary_name }}"
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             bin="${bin}.exe"
@@ -150,7 +155,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ inputs.project_name }} ${{ github.ref_name }}
+          name: ${{ inputs.project_name }} v${{ inputs.version || github.ref_name }}
+          tag_name: v${{ inputs.version || github.ref_name }}
           generate_release_notes: true
           files: ${{ inputs.binary_name }}-v*
 
@@ -165,4 +171,4 @@ jobs:
             -H "Authorization: token ${{ secrets.PAT_FOR_DOWNSTREAM }}" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/${{ github.repository_owner }}/${{ inputs.downstream_repo }}/dispatches \
-            -d '{"event_type":"${{ inputs.downstream_event_type }}","client_payload":{"upstream":"${{ inputs.binary_name }}","version":"${{ github.ref_name }}"}}'
+            -d '{"event_type":"${{ inputs.downstream_event_type }}","client_payload":{"upstream":"${{ inputs.binary_name }}","version":"v${{ inputs.version || github.ref_name }}"}}'
