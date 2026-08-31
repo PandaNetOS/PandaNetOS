@@ -1,0 +1,78 @@
+name: Unified Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: "发版类型"
+        required: true
+        type: choice
+        options:
+          - rust-binary
+          - docker-image
+          - rust-library
+          - frontend
+        default: rust-binary
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    outputs:
+      release_type: ${{ steps.detect.outputs.release_type }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect release type
+        id: detect
+        run: |
+          if [ -f "Cargo.toml" ] && grep -q '\[\[bin\]\]' Cargo.toml; then
+            echo "release_type=rust-binary" >> $GITHUB_OUTPUT
+          elif [ -f "Cargo.toml" ]; then
+            echo "release_type=rust-library" >> $GITHUB_OUTPUT
+          elif [ -f "Dockerfile" ]; then
+            echo "release_type=docker-image" >> $GITHUB_OUTPUT
+          elif [ -f "package.json" ]; then
+            echo "release_type=frontend" >> $GITHUB_OUTPUT
+          else
+            echo "release_type=rust-binary" >> $GITHUB_OUTPUT
+          fi
+
+  rust-binary:
+    needs: dispatch
+    if: ${{ needs.dispatch.outputs.release_type == 'rust-binary' }}
+    uses: PandaNetOS/PandaNetOS/.github/workflows/reusable-release-rust-binary.yml@main
+    with:
+      binary_name: ${{ github.event.repository.name }}
+      project_name: ${{ github.event.repository.name }}
+    secrets: inherit
+
+  docker-image:
+    needs: dispatch
+    if: ${{ needs.dispatch.outputs.release_type == 'docker-image' }}
+    uses: PandaNetOS/PandaNetOS/.github/workflows/reusable-release-docker-image.yml@main
+    with:
+      image_name: ${{ github.event.repository.name }}
+    secrets: inherit
+
+  rust-library:
+    needs: dispatch
+    if: ${{ needs.dispatch.outputs.release_type == 'rust-library' }}
+    uses: PandaNetOS/PandaNetOS/.github/workflows/reusable-release-rust-library.yml@main
+    with:
+      crate_name: ${{ github.event.repository.name }}
+    secrets: inherit
+
+  frontend:
+    needs: dispatch
+    if: ${{ needs.dispatch.outputs.release_type == 'frontend' }}
+    uses: PandaNetOS/PandaNetOS/.github/workflows/reusable-release-frontend.yml@main
+    with:
+      project_name: ${{ github.event.repository.name }}
+    secrets: inherit
