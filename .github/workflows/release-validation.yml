@@ -1,0 +1,91 @@
+name: Release Validation
+
+# 可复用工作流：所有仓库打 tag 发版前必须通过此校验
+on:
+  workflow_call:
+    inputs:
+      cargo-toml-path:
+        description: 'Cargo.toml 文件路径'
+        required: false
+        type: string
+        default: 'Cargo.toml'
+      check-main-ci:
+        description: '是否校验 main 分支 CI 状态'
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      GH_TOKEN:
+        description: 'GitHub Token（用于校验 main 分支 CI 状态）'
+        required: false
+
+jobs:
+  validate:
+    name: Release Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: 校验 Tag 格式
+        id: tag-format
+        run: |
+          TAG_REF="${{ github.ref }}"
+          if [[ ! "$TAG_REF" =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ Tag 格式错误: $TAG_REF"
+            echo "   必须是 vX.Y.Z 格式（语义化版本）"
+            exit 1
+          fi
+          TAG_VERSION="${TAG_REF#refs/tags/v}"
+          echo "✅ Tag 格式正确: v$TAG_VERSION"
+          echo "tag_version=$TAG_VERSION" >> $GITHUB_OUTPUT
+
+      - name: 校验 Cargo.toml 版本一致性
+        run: |
+          TAG_VERSION="${{ steps.tag-format.outputs.tag_version }}"
+          CARGO_FILE="${{ inputs.cargo-toml-path }}"
+          
+          if [ ! -f "$CARGO_FILE" ]; then
+            echo "❌ 找不到 Cargo.toml: $CARGO_FILE"
+            exit 1
+          fi
+          
+          CARGO_VERSION=$(grep '^version' "$CARGO_FILE" | head -1 | sed 's/version[[:space:]]*=[[:space:]]*"//;s/"//')
+          
+          if [ -z "$CARGO_VERSION" ]; then
+            echo "❌ 无法从 $CARGO_FILE 中读取版本号"
+            exit 1
+          fi
+          
+          if [ "$TAG_VERSION" != "$CARGO_VERSION" ]; then
+            echo "❌ 版本号不一致！"
+            echo "   Tag 版本:  v$TAG_VERSION"
+            echo "   Cargo 版本: $CARGO_VERSION"
+            echo ""
+            echo "   请先执行以下步骤："
+            echo "   1. 修改 $CARGO_FILE 中的 version 为 \"$TAG_VERSION\""
+            echo "   2. 提交并合并到 main 分支"
+            echo "   3. 确认 main 分支 CI 全部通过"
+            echo "   4. 重新打 tag v$TAG_VERSION"
+            exit 1
+          fi
+          
+          echo "✅ 版本号一致: tag=v$TAG_VERSION, cargo=$CARGO_VERSION"
+
+      - name: 校验 main 分支 CI 状态（可选）
+        if: ${{ inputs.check-main-ci }}
+        run: |
+          echo "⚠️  main 分支 CI 状态校验功能开发中，暂跳过"
+          # TODO: 使用 GitHub API 检查 main 分支最新 commit 的 check-runs 状态
+          # 需要传入 GH_TOKEN secret
+          echo "✅ CI 状态校验跳过"
+
+      - name: 校验结果汇总
+        run: |
+          echo "========================================"
+          echo "  Release 校验全部通过 ✅"
+          echo "========================================"
+          echo "  Tag 版本:   v${{ steps.tag-format.outputs.tag_version }}"
+          echo "  Cargo 版本: 已校验一致"
+          echo "  可以开始构建 Release"
+          echo "========================================"
