@@ -264,7 +264,10 @@ impl CoreError {
     /// 获取 HTTP 状态码
     pub fn http_status(&self) -> u16 {
         match self {
-            CoreError::Internal(_) | CoreError::External(_) | CoreError::IO(_) | CoreError::NotInitialized(_) => 500,
+            CoreError::Internal(_)
+            | CoreError::External(_)
+            | CoreError::IO(_)
+            | CoreError::NotInitialized(_) => 500,
             CoreError::InvalidParam(_) => 400,
             CoreError::Unauthorized | CoreError::AuthFailed(_) | CoreError::Auth(_) => 401,
             CoreError::Forbidden => 403,
