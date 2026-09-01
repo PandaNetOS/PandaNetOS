@@ -1,4 +1,4 @@
-//! 领域模型与扩展点
+﻿//! 领域模型与扩展点
 //!
 //! 核心领域模型（Task/Node/Dispatch）、状态枚举与端口 trait。
 //! 遵循 [`docs/architecture.md`] 的分层架构：domain 层不依赖任何外层。
@@ -233,6 +233,10 @@ pub struct DownloadProgress {
     pub speed_bps: u64,
     /// 活跃连接数
     pub active_connections: u32,
+    /// 下载进度百分比（0.0 - 100.0）
+    pub percent: f64,
+    /// 已用时间（秒）
+    pub elapsed_secs: f64,
 }
 
 // ============================================================================
@@ -372,6 +376,8 @@ pub struct SourceCapabilities {
     pub chunk_size_range: Option<(u64, u64)>,
     /// 内容是否不可变（如 CDN 静态资源，true 时可跳过校验）
     pub immutable: bool,
+    /// 协议类型（http/https/ftp/ssh/torrent/file 等）
+    pub protocol: &'static str,
 }
 
 impl Default for SourceCapabilities {
@@ -383,6 +389,7 @@ impl Default for SourceCapabilities {
             max_concurrency: 1,
             chunk_size_range: None,
             immutable: false,
+            protocol: "",
         }
     }
 }
