@@ -89,7 +89,7 @@ pub mod codes {
     /// 部分内容，断点续传（HTTP 206）
     pub const DOWNLOAD_PARTIAL_CONTENT: ErrorCode = "DOWNLOAD_PARTIAL_CONTENT";
     /// 请求范围不满足（HTTP 416）
-    pub const DOWNLOAD_RANGE_NOT_SATISFIABLE: ErrorCode = "DOWNLOAD_RANGE_NOT_SATISFIABLE";
+    pub const DOWNLOAD_RANGE_NOT_SATISFIED: ErrorCode = "DOWNLOAD_RANGE_NOT_SATISFIED";
 
     // 工作流领域（WORKFLOW_*）
     /// 工作流不存在（HTTP 404）
@@ -154,6 +154,26 @@ pub enum CoreError {
     #[error("服务不可用: {0}")]
     ServiceUnavailable(String),
 
+    /// 网络错误，连接/读取/写入失败
+    #[error("网络错误: {0}")]
+    Network(String),
+
+    /// 超时错误，操作超过时限
+    #[error("超时: {0}")]
+    Timeout(String),
+
+    /// IO 错误，文件读写失败
+    #[error("IO错误: {0}")]
+    IO(String),
+
+    /// 认证错误，登录/凭据验证失败
+    #[error("认证错误: {0}")]
+    Auth(String),
+
+    /// 未初始化错误，资源尚未准备好
+    #[error("未初始化: {0}")]
+    NotInitialized(String),
+
     /// 外部错误，来自下层依赖的未归类错误（HTTP 500）
     #[error("外部错误: {0}")]
     External(#[from] anyhow::Error),
@@ -199,7 +219,7 @@ pub fn error_code_http_status(code: &str) -> u16 {
         | codes::WORKFLOW_DISABLED
         | codes::CONFIG_READ_ONLY => 409,
         // 416
-        codes::DOWNLOAD_RANGE_NOT_SATISFIABLE => 416,
+        codes::DOWNLOAD_RANGE_NOT_SATISFIED => 416,
         // 429
         codes::RATE_LIMITED => 429,
         // 500
@@ -232,6 +252,11 @@ impl CoreError {
             CoreError::Conflict(_) => codes::CONFLICT,
             CoreError::RateLimited => codes::RATE_LIMITED,
             CoreError::ServiceUnavailable(_) => codes::SERVICE_UNAVAILABLE,
+            CoreError::Network(_) => codes::DOWNLOAD_CONNECTION_FAILED,
+            CoreError::Timeout(_) => codes::DOWNLOAD_TIMEOUT,
+            CoreError::IO(_) => codes::INTERNAL_ERROR,
+            CoreError::Auth(_) => codes::AUTH_TOKEN_INVALID,
+            CoreError::NotInitialized(_) => codes::INTERNAL_ERROR,
             CoreError::External(_) => codes::INTERNAL_ERROR,
         }
     }
@@ -239,14 +264,19 @@ impl CoreError {
     /// 获取 HTTP 状态码
     pub fn http_status(&self) -> u16 {
         match self {
-            CoreError::Internal(_) | CoreError::External(_) => 500,
+            CoreError::Internal(_)
+            | CoreError::External(_)
+            | CoreError::IO(_)
+            | CoreError::NotInitialized(_) => 500,
             CoreError::InvalidParam(_) => 400,
-            CoreError::Unauthorized | CoreError::AuthFailed(_) => 401,
+            CoreError::Unauthorized | CoreError::AuthFailed(_) | CoreError::Auth(_) => 401,
             CoreError::Forbidden => 403,
             CoreError::NotFound(_) => 404,
             CoreError::Conflict(_) => 409,
             CoreError::RateLimited => 429,
             CoreError::ServiceUnavailable(_) => 503,
+            CoreError::Network(_) => 502,
+            CoreError::Timeout(_) => 504,
         }
     }
 }
@@ -299,7 +329,7 @@ mod tests {
         assert_eq!(error_code_http_status(codes::WORKFLOW_DISABLED), 409);
         assert_eq!(error_code_http_status(codes::CONFIG_READ_ONLY), 409);
         assert_eq!(
-            error_code_http_status(codes::DOWNLOAD_RANGE_NOT_SATISFIABLE),
+            error_code_http_status(codes::DOWNLOAD_RANGE_NOT_SATISFIED),
             416
         );
         assert_eq!(error_code_http_status(codes::RATE_LIMITED), 429);
