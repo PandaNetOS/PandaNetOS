@@ -24,6 +24,7 @@ pub mod error;
 pub mod logging;
 pub mod protocol;
 pub mod response;
+pub mod service;
 pub mod time;
 pub mod utils;
 
@@ -33,6 +34,9 @@ pub use domain::{Dispatch, Node, NodeStatus, Task, TaskStatus};
 pub use error::{CoreError, ErrorCode, Result};
 pub use protocol::{ClientMsg, ServerMsg};
 pub use response::{ApiError, ApiResponse, PageQuery, PageResult};
+pub use service::{
+    ServiceAgentInfo, ServiceChangeType, ServiceChangedEvent, ServiceHealth, ServiceQueryResponse,
+};
 pub use time::now_rfc3339;
 
 /// 一站式导入：`use pandanetos::prelude::*;`
@@ -49,10 +53,16 @@ pub mod prelude {
     };
     pub use crate::error::{codes, CoreError, ErrorCode, Result};
     pub use crate::protocol::{
-        paths, ClientMsg, DispatchConfig, HeartbeatReq, RegisterReq, RegisterResp, ServerMsg,
-        UpdateNodeCapabilitiesReq, API_PREFIX,
+        paths, ClientMsg, DiscoverTask, DiscoveryResult, DiscoveryStarted, DispatchConfig,
+        HeartbeatReq, PeerBrief, RegisterReq, RegisterResp, ServerMsg, UpdateNodeCapabilitiesReq,
+        API_PREFIX,
     };
     pub use crate::response::{ApiError, ApiResponse, PageQuery, PageResult};
+    pub use crate::service::{
+        ServiceAgentInfo, ServiceChangeType, ServiceChangedEvent, ServiceHealth, ServiceQuery,
+        ServiceQueryResponse, CAP_ANNOUNCE, CAP_CACHE, CAP_DEDUP, CAP_DHT, CAP_HEALTH_CHECK,
+        CAP_PEX, CAP_PRIORITY_SORTING, CAP_TRACKER,
+    };
     pub use crate::time::{format_rfc3339, now_millis, now_rfc3339, parse_rfc3339};
     pub use crate::utils::{format_bytes, format_speed, is_valid_uuid, new_uuid, parse_bytes};
 }

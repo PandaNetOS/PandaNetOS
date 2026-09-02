@@ -31,6 +31,11 @@ pub mod paths {
     pub const NODES_OFFLINE: &str = "/api/v1/nodes/offline";
     /// 节点配置文件（YAML）
     pub const NODE_CONFIG_YAML: &str = "/api/v1/nodes/{id}/config.yaml";
+    // ===== 服务注册与发现 =====
+    /// 服务查询（按能力/类型/健康状态过滤）
+    pub const AGENTS: &str = "/api/v1/agents";
+    /// 单个服务详情
+    pub const AGENT_DETAIL: &str = "/api/v1/agents/{id}";
 
     // ===== 总览 =====
     /// 系统总览
@@ -79,6 +84,18 @@ pub struct RegisterReq {
     /// 通用能力参数（JSON，灵活扩展）
     #[serde(default)]
     pub capabilities: Option<serde_json::Value>,
+    /// serve 模式监听地址（用于 Agent 间点对点通信，可选）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub serve_host: Option<String>,
+    /// serve 模式监听端口（用于 Agent 间点对点通信，可选）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub serve_port: Option<u16>,
+    /// 区域/机房标识（用于区域感知调度，可选）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region: Option<String>,
+    /// 能力标识列表（如 ["tracker", "dht", "pex", "cache"]，用于服务注册中心）
+    #[serde(default)]
+    pub capability_tags: Vec<String>,
 }
 
 /// 节点注册响应
@@ -155,6 +172,35 @@ pub enum ServerMsg {
         #[serde(default)]
         save_path: Option<String>,
     },
+    /// 服务变更通知（服务注册中心推送，Agent 收到后更新本地服务缓存）
+    ServiceChanged {
+        /// 变更的 Agent ID
+        agent_id: Uuid,
+        /// 变更类型（up / down / updated）
+        change_type: String,
+        /// Agent 类型
+        agent_type: String,
+        /// 能力标识列表
+        #[serde(default)]
+        capabilities: Vec<String>,
+        /// serve 地址（下线事件可能为 None）
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        host: Option<String>,
+        /// serve 端口（下线事件可能为 None）
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        port: Option<u16>,
+        /// 区域
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        region: Option<String>,
+        /// 健康状态
+        #[serde(default)]
+        health: String,
+        /// 负载
+        #[serde(default)]
+        load: f32,
+    },
+    /// 发现任务（主控 → PDC 节点，要求发现指定 infohash 的 peer）
+    Discover(DiscoverTask),
 }
 
 /// WebSocket 节点→主控消息（ClientMsg）
@@ -258,6 +304,10 @@ pub enum ClientMsg {
         /// 累计下载字节数
         bytes_downloaded: u64,
     },
+    /// 发现任务开始（PDC 节点 → 主控）
+    DiscoveryStarted(DiscoveryStarted),
+    /// 发现结果回报（PDC 节点 → 主控）
+    DiscoveryResult(DiscoveryResult),
 }
 
 /// 下载任务配置（主控下发）
@@ -285,6 +335,78 @@ pub struct DispatchConfig {
     pub skip_tls_verify: bool,
 }
 
+// ─── PDC 发现任务相关消息 ───
+
+/// Peer 简要信息（发现结果中的单个 peer）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PeerBrief {
+    /// 节点地址（ip:port）
+    pub addr: String,
+    /// 来源（tracker / dht / pex / cache）
+    pub source: String,
+    /// 优先级分数（越高越优先）
+    #[serde(default)]
+    pub priority_score: u32,
+    /// 是否为 IPv6
+    #[serde(default)]
+    pub is_ipv6: bool,
+}
+
+/// 发现任务（主控 → PDC 节点）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoverTask {
+    /// 任务 ID
+    pub task_id: Uuid,
+    /// 目标 info_hash（hex 编码）
+    pub infohash: String,
+    /// 期望返回的 peer 数量上限
+    #[serde(default = "default_discover_limit")]
+    pub limit: usize,
+}
+
+fn default_discover_limit() -> usize {
+    200
+}
+
+/// 发现任务开始（PDC 节点 → 主控）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoveryStarted {
+    /// 任务 ID
+    pub task_id: Uuid,
+    /// 目标 info_hash
+    pub infohash: String,
+}
+
+/// 发现结果回报（PDC 节点 → 主控）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoveryResult {
+    /// 任务 ID
+    pub task_id: Uuid,
+    /// 目标 info_hash
+    pub infohash: String,
+    /// 发现的 peer 数量
+    pub peers_count: usize,
+    /// 发现的 peer 列表
+    #[serde(default)]
+    pub peers: Vec<PeerBrief>,
+    /// 耗时（毫秒）
+    #[serde(default)]
+    pub duration_ms: u64,
+    /// 各来源统计（source → count）
+    #[serde(default)]
+    pub source_stats: std::collections::HashMap<String, usize>,
+    /// 是否成功
+    #[serde(default = "default_true")]
+    pub success: bool,
+    /// 错误消息（失败时）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_msg: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -301,12 +423,18 @@ mod tests {
             max_concurrent: Some(4),
             max_bandwidth_bps: Some(104_857_600),
             capabilities: Some(serde_json::json!({ "resume": true })),
+            serve_host: Some("10.0.0.5".to_string()),
+            serve_port: Some(6881),
+            region: Some("cn-east".to_string()),
+            capability_tags: vec!["tracker".to_string(), "dht".to_string()],
         };
         let json = serde_json::to_string(&req).unwrap();
         let back: RegisterReq = serde_json::from_str(&json).unwrap();
         assert_eq!(back.hostname, "node-1");
         assert_eq!(back.max_concurrent, Some(4));
         assert_eq!(back.max_bandwidth_bps, Some(104_857_600));
+        assert_eq!(back.serve_port, Some(6881));
+        assert_eq!(back.capability_tags.len(), 2);
     }
 
     #[test]
