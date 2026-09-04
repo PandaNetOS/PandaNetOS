@@ -31,7 +31,7 @@ pub const CAP_HEALTH_CHECK: &str = "health_check";
 // ─── 服务健康状态 ───
 
 /// 服务健康状态
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ServiceHealth {
     /// 健康
@@ -39,22 +39,18 @@ pub enum ServiceHealth {
     /// 不健康
     Unhealthy,
     /// 未知（刚注册，尚未心跳）
+    #[default]
     Unknown,
 }
 
 impl ServiceHealth {
+    /// 返回健康状态的 snake_case 字符串表示
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Healthy => "healthy",
             Self::Unhealthy => "unhealthy",
             Self::Unknown => "unknown",
         }
-    }
-}
-
-impl Default for ServiceHealth {
-    fn default() -> Self {
-        Self::Unknown
     }
 }
 
@@ -73,6 +69,7 @@ pub enum ServiceChangeType {
 }
 
 impl ServiceChangeType {
+    /// 返回变更类型的 snake_case 字符串表示
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Up => "up",
@@ -172,11 +169,13 @@ pub struct ServiceQueryResponse {
 }
 
 impl ServiceQueryResponse {
+    /// 根据 Agent 列表构造查询响应（total 自动计算）
     pub fn new(agents: Vec<ServiceAgentInfo>) -> Self {
         let total = agents.len();
         Self { agents, total }
     }
 
+    /// 构造空的查询响应
     pub fn empty() -> Self {
         Self {
             agents: Vec::new(),
