@@ -230,7 +230,7 @@ POST /api/v1/agent/register
 | **spde** | 下载协议、下载特性、任务控制、可配置参数、硬件信息 | 注册时上报 |
 | **pk** | API 接口、调度能力、节点管理能力、配置项 | 启动时生成，供其他组件查询 |
 | **pcdn-keeper** | 镜像版本、包含组件版本、启动参数、环境变量 | 启动时上报给 pk |
-| **PeerDiscoveryCenter** | 库组件，无独立运行时，能力随 spde 清单上报（peer 发现：tracker/dht/pex） | 由 spde 透传 |
+| **PeerDiscoveryCenter** | peer 发现机制（tracker / dht / pex）、缓存策略、健康检查状态、并发与超时参数 | 作为 Agent 注册时上报 |
 | **未来项目** | 按本标准生成 | 按角色决定上报时机 |
 
 ## 7. CLI 命令
