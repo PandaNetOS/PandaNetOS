@@ -25,6 +25,7 @@ PandaNetOS 是 pandanetos 项目群的**架构标准、通信协议、共享代�
 │   └── crates/pandanetos/
 ├── pk/                      # 主控台
 ├── spde/                    # 下载节点
+├── PeerDiscoveryCenter/    # Peer 发现中心（Tracker + DHT + PEX）
 └── pcdn-keeper/             # Docker 封装
 ```
 
@@ -77,6 +78,7 @@ use pandanetos::prelude::*;
 | **spde** | 下载节点（Data Plane）- 多协议下载、带宽榨取、进度上报 | [pandamelive/spde](https://github.com/pandamelive/spde) |
 | **pcdn-keeper** | Docker 镜像 - 封装 pk + spde 的一体化部署 | [pandamelive/pcdn-keeper](https://github.com/pandamelive/pcdn-keeper) |
 | **runtime-rust** | Rust 运行时（Runtime）- 承载生态组件的标准 Rust 编译环境 | [pandamelive/runtime-rust](https://github.com/pandamelive/runtime-rust) |
+| **PeerDiscoveryCenter** | Peer 发现中心 - BitTorrent Peer 统一发现（Tracker + DHT + PEX） | [pandamelive/PeerDiscoveryCenter](https://github.com/pandamelive/PeerDiscoveryCenter) |
 | **PandaNetOS** | 架构标准 + 共享库 | 当前仓库 |
 
 ## 系统架构
