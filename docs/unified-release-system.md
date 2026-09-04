@@ -7,7 +7,7 @@ PandaNetOS 提供一套统一的、可扩展的发版工作流，所有项目通
 ## 架构
 
 ```
-各个仓库（spde、pk、pcdn-keeper等）
+各个仓库（spde、pk、pcdn-keeper、PeerDiscoveryCenter 等）
     ↓ 引用（15行调用文件）
 PandaNetOS 标准库
 ├── reusable-release-rust-binary.yml    # Rust 二进制项目

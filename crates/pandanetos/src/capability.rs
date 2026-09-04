@@ -49,7 +49,7 @@ impl ComponentRole {
 /// 基本信息（能力清单 2.2）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BasicInfo {
-    /// 程序名称（如 spde、pk、pcdn-keeper）
+    /// 程序名称（如 spde、pk、pcdn-keeper、PeerDiscoveryCenter）
     pub name: String,
     /// 语义化版本号（如 0.6.2）
     pub version: String,

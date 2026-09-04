@@ -76,6 +76,7 @@ docs: 补充标准库路径约定
 │   └── crates/pandanetos/
 ├── pk/                      # 主控台
 ├── spde/                    # 下载节点
+├── PeerDiscoveryCenter/    # Peer 发现中心（Tracker + DHT + PEX）
 └── pcdn-keeper/             # Docker 封装
 ```
 
