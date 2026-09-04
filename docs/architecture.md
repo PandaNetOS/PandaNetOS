@@ -2,10 +2,11 @@
 
 ## 架构原则
 
-1. **控制面与数据面分离**：pk（控制面）负责任务调度和节点管理，spde（数据面）负责实际下载
-2. **去中心化下载**：pk 不参与下载，只下发任务，spde 节点自主领取并执行
-3. **可水平扩展**：spde 节点可任意增减，pk 自动感知并调度
+1. **控制面与数据面分离**：pk（控制面）负责任务调度和节点管理，各类 Agent（数据面）负责实际执行
+2. **去中心化执行**：pk 不参与具体执行，只下发任务，Agent 自主领取并执行
+3. **可水平扩展**：任意类型的 Agent 都可任意增减，pk 自动感知并调度
 4. **协议无关**：下载能力通过抽象层扩展，新增协议不改核心
+5. **多 Agent 统一接入**：所有 Agent（spde、PeerDiscoveryCenter 及未来组件）遵循同一套接入协议，pk 侧无需为新增 Agent 改造
 
 ## 分层架构
 
@@ -152,17 +153,44 @@ spde 上报完成 → API 层 → 更新 dispatch 状态 → 记录运行日志
 
 | 方向 | 方式 | 用途 |
 |------|------|------|
-| pk → spde | HTTP 拉取（spde 主动） | 任务领取、配置获取 |
-| spde → pk | HTTP POST | 心跳、任务结果上报 |
-| spde → pk | WebSocket | 实时下载进度 |
+| pk → Agent | HTTP 拉取（Agent 主动） | 任务领取、配置获取 |
+| Agent → pk | HTTP POST | 心跳、任务结果上报 |
+| Agent → pk | WebSocket | 实时进度与状态 |
 | 用户 → pk | HTTP API | 任务管理、节点管理、调度 |
 | pk → 用户 | WebSocket | 实时状态推送 |
+
+> 表格中的 **Agent** 泛指接入 pk 的执行单元，目前包括 spde Agent（下载执行）与 PeerDiscoveryCenter Agent（Peer 发现），详见下方「多 Agent 连接层」。
 
 ### 为什么 spde 主动拉取任务
 
 - 穿透 NAT：spde 可能在内网，pk 无法主动连接
 - 解耦：pk 不需要维护 spde 连接状态
 - 容错：spde 断线重连后自动继续领取任务
+
+## 多 Agent 连接层
+
+架构最下层为多 Agent 连接层：pk 之下接入的是**多种类型的 Agent**，而非单一类型的下载节点。
+所有 Agent 使用同一套接入协议：
+
+| 阶段 | 接口 | 说明 |
+|------|------|------|
+| 注册 | `POST /api/v1/agent/register` | 上报能力清单 |
+| 长连接 | `WS /api/v1/agent/ws` | 实时指令与状态通道 |
+| 心跳 | `POST /api/v1/agent/heartbeat` | 保活并领取任务 |
+| 上报 | `POST /api/v1/agent/report` | 回写执行结果 |
+
+### 已接入的 Agent 类型
+
+| Agent | 职责 | 关键能力 | 扩展方式 |
+|-------|------|----------|----------|
+| **spde Agent** | 下载执行 | 多协议下载、分块 / 带宽调度、断点续传 / P2P、镜像与多源聚合 | ×N 横向扩展 |
+| **PeerDiscoveryCenter Agent** | Peer 发现 | Tracker（HTTP/UDP）、DHT（Kademlia）、PEX、缓存与健康检查 | ×N 横向扩展 |
+
+### 新增 Agent 类型的要求
+
+1. 实现统一接入协议（register / ws / heartbeat / report）
+2. 提供自描述能力清单（`--manifest`），见[自描述能力清单](standards/capability-manifest.md)
+3. 通过能力清单表达自身能力，pk 据此调度，无需修改 pk 代码
 
 ## 扩展点
 
@@ -183,4 +211,11 @@ spde 上报完成 → API 层 → 更新 dispatch 状态 → 记录运行日志
 
 1. 在 `domain/port.rs` 中定义 `Repository` trait
 2. 新增实现（如 PostgreSQL、MySQL）
+
+### 新增 Agent 类型
+
+1. 遵循[节点通信协议](standards/node-protocol.md)实现 register / ws / heartbeat / report
+2. 实现能力清单上报，见[自描述能力清单](standards/capability-manifest.md)
+3. 与 PandaNetOS 标准库同级目录放置，通过 path 依赖复用 `pandanetos`
+4. pk 侧无需改造，按能力清单自动识别与调度
 3. 依赖注入时选择实现
