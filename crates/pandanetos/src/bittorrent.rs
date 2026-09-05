@@ -116,15 +116,22 @@ impl AsRef<[u8]> for Infohash {
 /// Peer 来源
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PeerSource {
+    /// 来自 Tracker 服务器
     Tracker,
+    /// 来自 DHT 网络
     Dht,
+    /// 来自 Peer Exchange (PEX)
     Pex,
+    /// 来自 Local Peer Discovery (LPD)
     Lpd,
+    /// 来自 WebSeed (HTTP/FTP)
     WebSeed,
+    /// 手动添加
     Manual,
 }
 
 impl PeerSource {
+    /// 返回来源的字符串表示
     pub fn as_str(&self) -> &'static str {
         match self {
             PeerSource::Tracker => "tracker",
@@ -286,6 +293,22 @@ impl MetadataInfo {
     }
 }
 
+/// 简单的 URL 编码（percent-encoding）
+fn url_encode(s: &str) -> String {
+    let mut result = String::new();
+    for byte in s.as_bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                result.push(*byte as char);
+            }
+            _ => {
+                result.push_str(&format!("%{:02X}", byte));
+            }
+        }
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -351,7 +374,8 @@ mod tests {
     fn test_metadata_magnet_link() {
         let ih = Infohash::new([0xAB; 20]);
         let mut meta = MetadataInfo::new(ih, "test torrent".to_string());
-        meta.trackers.push("http://tracker.example.com/announce".to_string());
+        meta.trackers
+            .push("http://tracker.example.com/announce".to_string());
 
         let magnet = meta.to_magnet_link();
         assert!(magnet.starts_with("magnet:?xt=urn:btih:"));
@@ -365,20 +389,4 @@ mod tests {
         assert_eq!(PeerSource::Dht.to_string(), "dht");
         assert_eq!(PeerSource::Pex.to_string(), "pex");
     }
-}
-
-/// 简单的 URL 编码（percent-encoding）
-fn url_encode(s: &str) -> String {
-    let mut result = String::new();
-    for byte in s.as_bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                result.push(*byte as char);
-            }
-            _ => {
-                result.push_str(&format!("%{:02X}", byte));
-            }
-        }
-    }
-    result
 }

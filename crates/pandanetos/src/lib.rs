@@ -17,8 +17,8 @@
 //! use pandanetos::prelude::*;
 //! ```
 
-pub mod capability;
 pub mod bittorrent;
+pub mod capability;
 pub mod config;
 pub mod domain;
 pub mod error;
