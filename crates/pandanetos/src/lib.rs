@@ -17,6 +17,7 @@
 //! use pandanetos::prelude::*;
 //! ```
 
+pub mod bittorrent;
 pub mod capability;
 pub mod config;
 pub mod domain;
@@ -29,6 +30,7 @@ pub mod time;
 pub mod utils;
 
 // ---- 顶层 re-export（最常用类型，直接 `pandanetos::X` 可用）----
+pub use bittorrent::{FileInfo, Infohash, MetadataInfo, PeerInfo, PeerSource};
 pub use capability::{CapabilityManifest, ComponentRole};
 pub use domain::{Dispatch, Node, NodeStatus, Task, TaskStatus};
 pub use error::{CoreError, ErrorCode, Result};
@@ -41,6 +43,7 @@ pub use time::now_rfc3339;
 
 /// 一站式导入：`use pandanetos::prelude::*;`
 pub mod prelude {
+    pub use crate::bittorrent::{FileInfo, Infohash, MetadataInfo, PeerInfo, PeerSource};
     pub use crate::capability::{
         BasicInfo, BuildInfo, Capabilities, CapabilityManifest, Communication, ComponentRole,
         ConfigurableParam, StatusReport,
