@@ -25,6 +25,7 @@ PandaNetOS 是 pandanetos 项目群的**架构标准、通信协议、共享代�
 │   └── crates/pandanetos/
 ├── pk/                      # 主控台
 ├── spde/                    # 下载节点
+├── PeerDiscoveryCenter/    # Peer 发现中心（Tracker + DHT + PEX）
 └── pcdn-keeper/             # Docker 封装
 ```
 
@@ -77,33 +78,53 @@ use pandanetos::prelude::*;
 | **spde** | 下载节点（Data Plane）- 多协议下载、带宽榨取、进度上报 | [pandamelive/spde](https://github.com/pandamelive/spde) |
 | **pcdn-keeper** | Docker 镜像 - 封装 pk + spde 的一体化部署 | [pandamelive/pcdn-keeper](https://github.com/pandamelive/pcdn-keeper) |
 | **runtime-rust** | Rust 运行时（Runtime）- 承载生态组件的标准 Rust 编译环境 | [pandamelive/runtime-rust](https://github.com/pandamelive/runtime-rust) |
+| **PeerDiscoveryCenter** | Peer 发现中心 - BitTorrent Peer 统一发现（Tracker + DHT + PEX） | [pandamelive/PeerDiscoveryCenter](https://github.com/pandamelive/PeerDiscoveryCenter) |
 | **PandaNetOS** | 架构标准 + 共享库 | 当前仓库 |
 
 ## 系统架构
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                      用户 / 第三方系统                      │
+│                    用户 / 第三方系统                    │
 └──────────────────────────┬──────────────────────────────┘
                            │ HTTP API / WebSocket
 ┌──────────────────────────▼──────────────────────────────┐
-│                     pk (主控台)                            │
+│                      pk（主控台）                       │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │
-│  │ 任务管理  │ │ 节点管理  │ │ 调度引擎  │ │ 实时监控  │  │
+│  │ 任务管理 │ │ 节点管理 │ │ 调度引擎 │ │ 实时监控 │  │
 │  └──────────┘ └──────────┘ └──────────┘ └──────────┘  │
 │  ┌────────────────────────────────────────────────────┐  │
-│  │              SQLite (任务/节点/调度记录)              │  │
+│  │          SQLite（任务 / 节点 / 调度记录）          │  │
 │  └────────────────────────────────────────────────────┘  │
 └──────────────────────────┬──────────────────────────────┘
-                           │ 任务下发 (config.yaml)
-                           │ 心跳/进度上报 (HTTP + WS)
-          ┌────────────────┼────────────────┐
-          │                │                │
-┌─────────▼──────┐ ┌──────▼───────┐ ┌─────▼────────┐
-│  spde 节点 1    │ │  spde 节点 2  │ │  spde 节点 N  │
-│  (多协议下载)   │ │  (多协议下载)  │ │  (多协议下载)  │
-└────────────────┘ └──────────────┘ └──────────────┘
+                           │ 多 Agent 连接（统一接入协议）
+                           │ · 注册     POST /api/v1/agent/register
+                           │ · 长连接   WS /api/v1/agent/ws
+                           │ · 心跳     POST /api/v1/agent/heartbeat（领取任务）
+                           │ · 上报     POST /api/v1/agent/report（回写结果）
+            ┌──────────────┴──────────┬─────────────────────────┐
+            │                         │                         │
+┌───────────▼───────────┐ ┌───────────▼───────────┐ ┌───────────▼───────────┐
+│ spde Agent ×N         │ │ PeerDiscoveryCenter   │ │ 未来 Agent ×N         │
+│ （下载执行）          │ │ Agent ×N（Peer 发现） │ │ （按标准接入）        │
+│ · 多协议下载          │ │ · Tracker HTTP/UDP    │ │ · 能力清单自描述      │
+│ · 分块 / 带宽调度     │ │ · DHT（Kademlia）     │ │ · 注册即接入          │
+│ · 断点续传 / P2P      │ │ · PEX（Peer Exchange）│ │ · 协议无关扩展        │
+│ · 镜像与多源聚合      │ │ · 缓存 / 健康检查     │ │                       │
+└───────────────────────┘ └───────────────────────┘ └───────────────────────┘
 ```
+
+最下层为**多 Agent 连接层**：所有 Agent 使用同一套接入协议连到 PK —— 先 `register` 注册，再建立 WebSocket 长连接，通过 `heartbeat` 领取任务、通过 `report` 回写结果；未指定 master 时 Agent 会自动扫描局域网发现主控。
+
+当前已接入两类 Agent，且均可横向扩展（×N）：
+
+| Agent | 职责 | 关键能力 |
+|------|------|----------|
+| **spde Agent** | 下载执行 | 多协议下载、分块/带宽调度、断点续传/P2P、镜像与多源聚合 |
+| **PeerDiscoveryCenter Agent** | Peer 发现 | Tracker（HTTP/UDP）、DHT（Kademlia）、PEX、缓存与健康检查 |
+
+未来新增 Agent 只要遵循同一接入协议即可注册接入，PK 侧无需改造。
+
 
 ## 标准规范
 

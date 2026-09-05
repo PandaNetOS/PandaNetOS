@@ -2,12 +2,23 @@
 
 ## 概述
 
-节点（spde agent）与主控（pk）之间通过 **HTTP REST + WebSocket** 双通道通信：
+**Agent** 与主控（pk）之间通过 **HTTP REST + WebSocket** 双通道通信：
 
 - **HTTP**：注册、心跳、配置拉取、结果回报
 - **WebSocket**：实时指令下发、状态推送
 
 所有 API 路径前缀：`/api/v1`
+
+### 适用范围
+
+本协议适用于**所有接入 pk 的 Agent**，不限于下载节点。当前已接入：
+
+| Agent | 职责 | 说明 |
+|-------|------|------|
+| `spde` | 下载执行 | 下载节点，领取下载任务并回写结果 |
+| `PeerDiscoveryCenter` | Peer 发现 | 提供 Tracker + DHT + PEX 的 peer 发现能力 |
+
+未来新增 Agent 遵循同一协议即可接入，主控侧无需改造。
 
 ## 节点注册
 
@@ -178,7 +189,12 @@ POST /api/v1/nodes/{node_id}/capabilities
 |------|------|------|------|
 | `capabilities` | object | 是 | Capability Manifest |
 
-节点启动时或能力变更时上报，主控据此进行调度决策。
+节点（Agent）启动时或能力变更时上报，主控据此进行调度决策。
+
+各类 Agent 上报的能力内容不同，例如：
+
+- **spde**：下载协议、下载特性、任务控制、可配置参数、硬件信息
+- **PeerDiscoveryCenter**：peer 发现机制（tracker / dht / pex）、缓存策略、健康检查状态、并发与超时参数
 
 ## 鉴权
 
