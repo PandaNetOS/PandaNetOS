@@ -111,7 +111,10 @@ jobs:
         shell: bash
         run: |
           cp -r ../PandaNetOS ./PandaNetOS
-          sed -i 's|../PandaNetOS|PandaNetOS|g' Cargo.toml
+          # 只改写 path 依赖（../PandaNetOS/... → PandaNetOS/...）
+          # 注意必须转义点号：未转义的 `.` 会匹配任意字符，
+          # 进而把 git 依赖 URL 里的 github.com/PandaNetOS 破坏成 github.cPandaNetOS
+          sed -i 's|\.\./PandaNetOS|PandaNetOS|g' Cargo.toml
           cross build --release --target ${{ matrix.target }}
 
       - name: Build with sccache (Windows/macOS)
